@@ -43,7 +43,7 @@ pub fn comm_client(
                 clients[index].sessions = sessions;
                 clients[index].wg_peers = wg_peers;
                 clients[index].last_update = SystemTime::now();
-                eprintln!("Received update from {}.", clients[index].address);
+                println!("Received update from {}.", clients[index].address);
             } else {
                 eprintln!("Client is no longer in the data list; Client will be reinitialized.");
                 serial = init_client(&stream, counter, clients);
