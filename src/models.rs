@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::net::{IpAddr, SocketAddr};
-use std::time::Duration;
+use std::time::SystemTime;
 
 #[derive(Debug, PartialEq)]
 pub enum Mode {
@@ -30,7 +30,7 @@ pub struct Client {
     pub address: SocketAddr,
     pub sessions: Vec<Session>,
     pub wg_peers: Vec<WgPeer>,
-    pub last_update: Duration,
+    pub last_update: SystemTime,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

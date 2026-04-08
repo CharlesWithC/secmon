@@ -3,7 +3,7 @@ use std::net::TcpStream;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::SystemTime;
 
 use crate::comm::SendRecv;
 use crate::models::{Client, Command, Message};
@@ -18,7 +18,7 @@ pub fn init_client(stream: &TcpStream, counter: &mut u32, clients: &mut Vec<Clie
         address: stream.peer_addr().unwrap(),
         sessions: Vec::new(),
         wg_peers: Vec::new(),
-        last_update: Duration::from_secs(0),
+        last_update: SystemTime::now(),
     };
     println!("Client connected: {}.", client.address);
     clients.push(client);
@@ -42,7 +42,7 @@ pub fn comm_client(
             if let Some(index) = clients.iter().position(|client| client.serial == serial) {
                 clients[index].sessions = sessions;
                 clients[index].wg_peers = wg_peers;
-                clients[index].last_update = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+                clients[index].last_update = SystemTime::now();
                 eprintln!("Received update from {}.", clients[index].address);
             } else {
                 eprintln!("Client is no longer in the data list; Client will be reinitialized.");
