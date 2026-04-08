@@ -27,11 +27,9 @@ pub fn init_client(stream: &TcpStream, counter: &mut u32, clients: &mut Vec<Clie
     *counter
 }
 
-pub fn comm_client(
-    mut stream: TcpStream,
-    mut serial: u32,
-    mutex: Arc<Mutex<(u32, Vec<Client>)>>,
-) -> Result<()> {
+pub type ClientState = Arc<Mutex<(u32, Vec<Client>)>>;
+
+pub fn comm_client(mut stream: TcpStream, mut serial: u32, mutex: ClientState) -> Result<()> {
     loop {
         let command = Command::Report;
         stream.send(&command)?;
