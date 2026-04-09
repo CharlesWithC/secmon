@@ -11,7 +11,7 @@ use crate::models::{Client, Command, Message};
 pub type ClientState = Arc<Mutex<(u32, Vec<Client>)>>;
 
 /// Initialize client connection in `clients` list.
-/// 
+///
 /// Increments `counter` and set 'serial' to the incremented `counter`.
 ///
 /// Returns `serial` of the client for later identification.
@@ -27,7 +27,7 @@ pub fn init_client(stream: &TcpStream, counter: &mut u32, clients: &mut Vec<Clie
         wg_peers: Vec::new(),
         last_update: SystemTime::now(),
     };
-    println!("Client connected: {}.", client.address);
+    println!("Client connected: {}", client.address);
     clients.push(client);
 
     // return client serial
@@ -35,7 +35,7 @@ pub fn init_client(stream: &TcpStream, counter: &mut u32, clients: &mut Vec<Clie
 }
 
 /// Server-side main function to communicate with client identified by `serial`.
-/// 
+///
 /// `init_client` must be called before calling this function.
 ///
 /// This is a blocking function and does not exit until connection is closed.
@@ -44,7 +44,7 @@ pub fn comm_client(mut stream: TcpStream, mut serial: u32, mutex: ClientState) -
     loop {
         let command = Command::Report;
 
-        println!("Sending {:?} to {address}.", command);
+        println!("Sending {:?} to {address}", command);
         stream.write(&command)?;
 
         let message = stream.read::<Message>()?;
@@ -53,7 +53,7 @@ pub fn comm_client(mut stream: TcpStream, mut serial: u32, mutex: ClientState) -
             match message {
                 Message::Report(sessions, wg_peers) => {
                     println!(
-                        "{address} responded Report with {} sessions and {} wg_peers.",
+                        "{address} responded Report with {} sessions and {} wg_peers",
                         sessions.len(),
                         wg_peers.len()
                     );
@@ -62,13 +62,11 @@ pub fn comm_client(mut stream: TcpStream, mut serial: u32, mutex: ClientState) -
                     clients[index].last_update = SystemTime::now();
                 }
                 Message::Result(success, message) => {
-                    println!("{address} responded Result {success} message {message}.");
+                    println!("{address} responded Result {success} message {message}");
                 }
             }
         } else {
-            eprintln!(
-                "{address} is no longer a recognized client; {address} will be reinitialized."
-            );
+            eprintln!("{address} is no longer a recognized client");
             serial = init_client(&stream, counter, clients);
         }
 

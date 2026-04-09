@@ -40,16 +40,16 @@ pub enum Command {
     Report,
 
     /// Enable a systemctl service
-    /// 
+    ///
     /// `bool` is whether to add '--now' flag
-    /// 
+    ///
     /// `String` is the service name
     ServiceEnable(bool, String),
 
     /// Disable a systemctl service
-    /// 
+    ///
     /// `bool` is whether to add '--now' flag
-    /// 
+    ///
     /// `String` is the service name
     ServiceDisable(bool, String),
 }
@@ -61,9 +61,9 @@ pub enum Message {
     Report(Vec<Session>, Vec<WgPeer>),
 
     /// Generic result of a command
-    /// 
+    ///
     /// `bool` is whether the command succeeded
-    /// 
+    ///
     /// `String` is the message of the result
     Result(bool, String),
 }

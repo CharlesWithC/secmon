@@ -23,7 +23,7 @@ fn main() {
         "server" => Mode::Server,
         "client" => Mode::Client,
         _ => {
-            eprintln!("Invalid mode; Must be either 'server' or 'client'.");
+            eprintln!("Invalid mode; Must be either 'server' or 'client'");
             process::exit(1);
         }
     };
@@ -32,7 +32,7 @@ fn main() {
     let ip = match ip_str.parse::<IpAddr>() {
         Ok(ip) => ip,
         _ => {
-            eprintln!("Invalid IP address.");
+            eprintln!("Invalid IP address");
             process::exit(1);
         }
     };
