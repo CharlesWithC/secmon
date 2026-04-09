@@ -5,9 +5,16 @@ use std::thread;
 use std::time::Duration;
 use std::time::SystemTime;
 
-use crate::comm::SendRecv;
+use crate::iosered::IOSerialized;
 use crate::models::{Client, Command, Message};
 
+pub type ClientState = Arc<Mutex<(u32, Vec<Client>)>>;
+
+/// Initialize client connection in `clients` list.
+/// 
+/// Increments `counter` and set 'serial' to the incremented `counter`.
+///
+/// Returns `serial` of the client for later identification.
 pub fn init_client(stream: &TcpStream, counter: &mut u32, clients: &mut Vec<Client>) -> u32 {
     // increment counter for client
     *counter += 1;
@@ -27,27 +34,42 @@ pub fn init_client(stream: &TcpStream, counter: &mut u32, clients: &mut Vec<Clie
     *counter
 }
 
-pub type ClientState = Arc<Mutex<(u32, Vec<Client>)>>;
-
+/// Server-side main function to communicate with client identified by `serial`.
+/// 
+/// `init_client` must be called before calling this function.
+///
+/// This is a blocking function and does not exit until connection is closed.
 pub fn comm_client(mut stream: TcpStream, mut serial: u32, mutex: ClientState) -> Result<()> {
+    let address = stream.peer_addr().unwrap();
     loop {
         let command = Command::Report;
-        stream.send(&command)?;
 
-        let message = stream.recv::<Message>()?;
-        if let Message::Report(sessions, wg_peers) = message {
-            let (counter, clients) = &mut *mutex.lock().unwrap();
-            if let Some(index) = clients.iter().position(|client| client.serial == serial) {
-                clients[index].sessions = sessions;
-                clients[index].wg_peers = wg_peers;
-                clients[index].last_update = SystemTime::now();
-                println!("Received update from {}.", clients[index].address);
-            } else {
-                eprintln!("Client is no longer in the data list; Client will be reinitialized.");
-                serial = init_client(&stream, counter, clients);
+        println!("Sending {:?} to {address}.", command);
+        stream.write(&command)?;
+
+        let message = stream.read::<Message>()?;
+        let (counter, clients) = &mut *mutex.lock().unwrap();
+        if let Some(index) = clients.iter().position(|client| client.serial == serial) {
+            match message {
+                Message::Report(sessions, wg_peers) => {
+                    println!(
+                        "{address} responded Report with {} sessions and {} wg_peers.",
+                        sessions.len(),
+                        wg_peers.len()
+                    );
+                    clients[index].sessions = sessions;
+                    clients[index].wg_peers = wg_peers;
+                    clients[index].last_update = SystemTime::now();
+                }
+                Message::Result(success, message) => {
+                    println!("{address} responded Result {success} message {message}.");
+                }
             }
         } else {
-            eprintln!("Client did not respond with a report; This should not happen.");
+            eprintln!(
+                "{address} is no longer a recognized client; {address} will be reinitialized."
+            );
+            serial = init_client(&stream, counter, clients);
         }
 
         thread::sleep(Duration::from_secs(5));

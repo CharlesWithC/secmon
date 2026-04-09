@@ -34,18 +34,39 @@ pub struct Client {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+/// Reprents a Command sent from server to client.
 pub enum Command {
+    /// Request a report of Session and WgPeer
     Report,
-    WgUp(String),
-    WgDown(String),
-    ServiceUp(String),
-    ServiceDown(String),
+
+    /// Enable a systemctl service
+    /// 
+    /// `bool` is whether to add '--now' flag
+    /// 
+    /// `String` is the service name
+    ServiceEnable(bool, String),
+
+    /// Disable a systemctl service
+    /// 
+    /// `bool` is whether to add '--now' flag
+    /// 
+    /// `String` is the service name
+    ServiceDisable(bool, String),
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+/// Represents a Message sent from client to server.
 pub enum Message {
+    /// Report of Session and WgPeer
     Report(Vec<Session>, Vec<WgPeer>),
-    Result(String),
+
+    /// Generic result of a command
+    /// 
+    /// `bool` is whether the command succeeded
+    /// 
+    /// `String` is the message of the result
+    Result(bool, String),
 }
 
+/// Default PORT that client and server agree
 pub const PORT: u16 = 9992;

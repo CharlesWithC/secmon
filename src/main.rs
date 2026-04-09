@@ -4,7 +4,7 @@ use std::thread;
 use std::{env, process};
 
 mod client;
-mod comm;
+mod iosered;
 mod models;
 mod server;
 use crate::client::comm_server;
