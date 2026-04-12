@@ -25,15 +25,14 @@ pub struct Session {
     pub user: String,
     pub from: String,
     pub login: String,
-    pub what: String,
 }
 
 impl fmt::Display for Session {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "Session(user=\"{}\", from=\"{}\", login=\"{}\", what=\"{}\")",
-            self.user, self.from, self.login, self.what
+            "Session(user=\"{}\", from=\"{}\", login=\"{}\")",
+            self.user, self.from, self.login
         )
     }
 }

@@ -56,6 +56,9 @@ pub fn comm_client(mut stream: TcpStream, mut serial: u32, mutex: ClientState) -
                     for session in sessions.iter() {
                         println!("{session}");
                     }
+                    for wg_peer in wg_peers.iter() {
+                        println!("{wg_peer}");
+                    }
                     clients[index].sessions = sessions;
                     clients[index].wg_peers = wg_peers;
                     clients[index].last_update = SystemTime::now();

@@ -3,32 +3,44 @@ use std::process::Command;
 
 use crate::models::{Session, WgPeer};
 
-/// Returns a list of user sessions based on `w` command output.
+/// Returns a list of user sessions based on `who` command output.
 pub fn get_sessions() -> Result<Vec<Session>> {
-    let output = Command::new("w").args(["-h", "-f"]).output()?;
+    let output = Command::new("who").args(["-w"]).output()?;
 
     if !output.status.success() {
         return Err(anyhow!(
-            "command 'w' did not succeed: {}",
+            "command 'who' did not succeed: {}",
             str::from_utf8(&output.stderr)?
         ));
     }
 
-    let sessions = Vec::<Session>::new();
+    let mut sessions = Vec::<Session>::new();
 
-    // for line in str::from_utf8(&output.stdout)?.lines() {
-    //     let parts = line.split("\t").collect::<Vec<_>>();
-    //     if parts.len() < 8 {
-    //         return Err(anyhow!("command 'w' did not produce a valid output"));
-    //     }
+    for line in str::from_utf8(&output.stdout)?.lines() {
+        let parts = line.split_whitespace().collect::<Vec<_>>();
+        if parts.len() < 3 {
+            return Err(anyhow!("command 'who' did not produce a valid output"));
+        }
 
-    //     sessions.push(Session {
-    //         user: parts[0].to_owned(),
-    //         from: parts[2].to_owned(),
-    //         login: parts[3].to_owned(),
-    //         what: parts[7..].join(" "),
-    //     });
-    // }
+        let len = parts.len();
+        let mut roffset = 1;
+
+        // NAME
+        let user = parts[0].to_owned();
+
+        // COMMENT (typically contains 'from' inside parenthesis)
+        let supposed_comment = parts[len - roffset];
+        let mut from = String::from("N/A");
+        if supposed_comment.starts_with("(") && supposed_comment.ends_with(")") {
+            from = supposed_comment[1..supposed_comment.len() - 1].to_owned();
+            roffset += 1;
+        }
+
+        // TIME (YYYY-MM-DD HH:MM)
+        let login = format!("{} {}", parts[len - roffset - 1], parts[len - roffset]);
+
+        sessions.push(Session { user, from, login });
+    }
 
     Ok(sessions)
 }
@@ -44,21 +56,56 @@ pub fn get_wg_peers() -> Result<Vec<WgPeer>> {
         ));
     }
 
-    let wg_peers = Vec::<WgPeer>::new();
+    let mut wg_peers = Vec::<WgPeer>::new();
 
-    // let lines = str::from_utf8(&output.stdout)?.lines();
-    // while let Some(line) = lines.next() {
-    //     let section = line.split_whitespace().collect::<Vec<_>>();
-    //     match section.as_slice() {
-    //         // handles interface and all its peers
-    //         ["interface:", interface_ref, ..] => {
-    //             let interface = (*interface_ref).to_owned();
+    let mut interface = "N/A";
+    let mut lines = str::from_utf8(&output.stdout)?.lines();
+    while let Some(line) = lines.next() {
+        let line_split = line.split_whitespace().collect::<Vec<_>>();
+        match line_split.as_slice() {
+            // handles interface
+            ["interface:", interface_ref, ..] => {
+                interface = *interface_ref;
 
-    //             lines.next();
-    //         },
-    //         _ => continue // don't care
-    //     }
-    // }
+                while let Some(line) = lines.next() {
+                    let line_split = line.split_whitespace().collect::<Vec<_>>();
+                    match line_split.as_slice() {
+                        [] => break,   // empty line, interface block finished
+                        _ => continue, // entry that we don't care
+                    }
+                }
+            }
+            // handles peer
+            ["peer:", peer_ref, ..] => {
+                let peer = (*peer_ref).to_owned();
+                let mut endpoint = String::from("N/A");
+                let mut latest_handshake = String::from("N/A");
+
+                while let Some(line) = lines.next() {
+                    let line_split = line.split_whitespace().collect::<Vec<_>>();
+                    match line_split.as_slice() {
+                        ["endpoint:", endpoint_ref, ..] => {
+                            endpoint = (*endpoint_ref).to_owned();
+                        }
+                        ["latest", "handshake:", latest_handshake_ref @ ..] => {
+                            latest_handshake = latest_handshake_ref.join(" ");
+                        }
+                        [] => break,   // empty line, peer block finished
+                        _ => continue, // entry that we don't care
+                    }
+                }
+
+                wg_peers.push(WgPeer {
+                    interface: interface.to_owned(),
+                    peer,
+                    endpoint,
+                    latest_handshake,
+                });
+            }
+            // don't care other sections
+            _ => continue,
+        }
+    }
 
     Ok(wg_peers)
 }
