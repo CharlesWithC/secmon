@@ -1,4 +1,4 @@
-use std::io::Result;
+use anyhow::Result;
 use std::net::TcpStream;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -23,8 +23,8 @@ pub fn init_client(stream: &TcpStream, counter: &mut u32, clients: &mut Vec<Clie
     let client = Client {
         serial: *counter,
         address: stream.peer_addr().unwrap(),
-        sessions: Vec::new(),
-        wg_peers: Vec::new(),
+        sessions: Ok(Vec::new()),
+        wg_peers: Ok(Vec::new()),
         last_update: SystemTime::now(),
     };
     println!("Client connected: {}", client.address);
@@ -53,12 +53,27 @@ pub fn comm_client(mut stream: TcpStream, mut serial: u32, mutex: ClientState) -
             println!("{address} responded {message}");
             match message {
                 Message::Report(sessions, wg_peers) => {
-                    for session in sessions.iter() {
-                        println!("{session}");
+                    match &sessions {
+                        Ok(sessions) => {
+                            for session in sessions.iter() {
+                                println!("{session}");
+                            }
+                        }
+                        Err(error) => {
+                            println!("Error: {error}");
+                        }
                     }
-                    for wg_peer in wg_peers.iter() {
-                        println!("{wg_peer}");
+                    match &wg_peers {
+                        Ok(wg_peers) => {
+                            for wg_peer in wg_peers.iter() {
+                                println!("{wg_peer}");
+                            }
+                        }
+                        Err(error) => {
+                            println!("Error: {error}");
+                        }
                     }
+
                     clients[index].sessions = sessions;
                     clients[index].wg_peers = wg_peers;
                     clients[index].last_update = SystemTime::now();

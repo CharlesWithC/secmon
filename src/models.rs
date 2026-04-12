@@ -1,3 +1,4 @@
+use anyhow::Result;
 use chrono::DateTime;
 use chrono::offset::Utc;
 use serde::{Deserialize, Serialize};
@@ -22,27 +23,39 @@ impl fmt::Display for Mode {
 
 #[derive(Serialize, Deserialize)]
 pub struct Session {
+    /// Name of user relevant to the session
     pub user: String,
-    pub from: String,
+    /// Remote origin of session (may be `None` for local session)
+    pub from: Option<String>,
+    /// Login time of session
     pub login: String,
 }
+
+pub type Sessions = Vec<Session>;
+pub type SessionsResult = Result<Sessions, String>;
 
 impl fmt::Display for Session {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
             "Session(user=\"{}\", from=\"{}\", login=\"{}\")",
-            self.user, self.from, self.login
+            self.user,
+            self.from.as_deref().unwrap_or("N/A"),
+            self.login
         )
     }
 }
 
 #[derive(Serialize, Deserialize)]
 pub struct WgPeer {
+    /// WireGuard interface
     pub interface: String,
+    /// WireGuard peer
     pub peer: String,
-    pub endpoint: String,
-    pub latest_handshake: String,
+    /// WireGuard peer endpoint (connecting IP/port)
+    pub endpoint: Option<String>,
+    /// WireGuard peer last handshake (last connection time)
+    pub latest_handshake: Option<String>,
 }
 
 impl fmt::Display for WgPeer {
@@ -50,16 +63,22 @@ impl fmt::Display for WgPeer {
         write!(
             f,
             "WgPeer(interface=\"{}\", peer=\"{}\", endpoint=\"{}\", latest_handshake=\"{}\")",
-            self.interface, self.peer, self.endpoint, self.latest_handshake
+            self.interface,
+            self.peer,
+            self.endpoint.as_deref().unwrap_or("N/A"),
+            self.latest_handshake.as_deref().unwrap_or("N/A")
         )
     }
 }
 
+pub type WgPeers = Vec<WgPeer>;
+pub type WgPeersResult = Result<WgPeers, String>;
+
 pub struct Client {
     pub serial: u32,
     pub address: SocketAddr,
-    pub sessions: Vec<Session>,
-    pub wg_peers: Vec<WgPeer>,
+    pub sessions: SessionsResult,
+    pub wg_peers: WgPeersResult,
     pub last_update: SystemTime,
 }
 
@@ -71,8 +90,14 @@ impl fmt::Display for Client {
             "Client(serial={}, address=\"{}\", sessions[{}], wg_peers[{}], last_update=\"{}\")",
             self.serial,
             self.address,
-            self.sessions.len(),
-            self.wg_peers.len(),
+            self.sessions
+                .as_ref()
+                .map(|v| v.len() as isize)
+                .unwrap_or(-1),
+            self.wg_peers
+                .as_ref()
+                .map(|v| v.len() as isize)
+                .unwrap_or(-1),
             last_update_datetime.format("%F %T")
         )
     }
@@ -123,7 +148,7 @@ impl fmt::Display for Command {
 /// Represents a Message sent from client to server.
 pub enum Message {
     /// Report of Session and WgPeer
-    Report(Vec<Session>, Vec<WgPeer>),
+    Report(SessionsResult, WgPeersResult),
 
     /// Generic result of a command
     ///
@@ -139,8 +164,8 @@ impl fmt::Display for Message {
             Message::Report(sessions, wg_peers) => write!(
                 f,
                 "Message::Report(sessions[{}], wg_peers[{}])",
-                sessions.len(),
-                wg_peers.len()
+                sessions.as_ref().map(|v| v.len() as isize).unwrap_or(-1),
+                wg_peers.as_ref().map(|v| v.len() as isize).unwrap_or(-1),
             ),
             Message::Result(success, message) => write!(
                 f,

@@ -1,6 +1,7 @@
-use std::io::Result;
+use anyhow::Result;
 use std::net::TcpStream;
 
+mod exec;
 mod report;
 use crate::client::report::get_report;
 use crate::iosered::IOSerialized;
@@ -16,15 +17,8 @@ pub fn comm_server(mut stream: TcpStream) -> Result<()> {
 
         match command {
             Command::Report => {
-                let report = get_report();
-                match report {
-                    Ok((sessions, wg_peers)) => {
-                        stream.write(&Message::Report(sessions, wg_peers))?;
-                    }
-                    Err(error) => {
-                        stream.write(&Message::Result(false, format!("{:?}", error)))?;
-                    }
-                }
+                let (sessions, wg_peers) = get_report();
+                stream.write(&Message::Report(sessions, wg_peers))?;
             }
             _ => {
                 eprintln!("Not implemented");
