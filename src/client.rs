@@ -12,7 +12,7 @@ use crate::models::{Command, Message};
 pub fn comm_server(mut stream: TcpStream) -> Result<()> {
     loop {
         let command = stream.read::<Command>()?;
-        println!("Received {:?}", command);
+        println!("Received {}", command);
 
         match command {
             Command::Report => {

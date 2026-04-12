@@ -44,26 +44,23 @@ pub fn comm_client(mut stream: TcpStream, mut serial: u32, mutex: ClientState) -
     loop {
         let command = Command::Report;
 
-        println!("Sending {:?} to {address}", command);
+        println!("Sending {} to {address}", command);
         stream.write(&command)?;
 
         let message = stream.read::<Message>()?;
         let (counter, clients) = &mut *mutex.lock().unwrap();
         if let Some(index) = clients.iter().position(|client| client.serial == serial) {
+            println!("{address} responded {message}");
             match message {
                 Message::Report(sessions, wg_peers) => {
-                    println!(
-                        "{address} responded Report with {} sessions and {} wg_peers",
-                        sessions.len(),
-                        wg_peers.len()
-                    );
+                    for session in sessions.iter() {
+                        println!("{session}");
+                    }
                     clients[index].sessions = sessions;
                     clients[index].wg_peers = wg_peers;
                     clients[index].last_update = SystemTime::now();
                 }
-                Message::Result(success, message) => {
-                    println!("{address} responded Result {success} message {message}");
-                }
+                _ => {}
             }
         } else {
             eprintln!("{address} is no longer a recognized client");

@@ -18,7 +18,7 @@ pub trait IOSerialized {
 impl IOSerialized for TcpStream {
     /// Serialize `data` and write serialized data to `TcpStream`.
     fn write<T: Serialize>(&mut self, data: &T) -> Result<()> {
-        let encoded = postcard::to_stdvec(data).unwrap();
+        let encoded = postcard::to_stdvec(data).expect("data should be serializable");
         self.write_all(&(encoded.len() as u32).to_be_bytes())?;
         self.write_all(&encoded)
     }
@@ -32,7 +32,7 @@ impl IOSerialized for TcpStream {
         let mut data = vec![0u8; len];
         self.read_exact(&mut data)?;
 
-        let decoded = postcard::from_bytes(&data).unwrap();
+        let decoded = postcard::from_bytes(&data).expect("data should be deserializable");
         Ok(decoded)
     }
 }
