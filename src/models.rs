@@ -3,17 +3,18 @@ use chrono::DateTime;
 use chrono::offset::Utc;
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use std::net::{IpAddr, Ipv4Addr};
 use std::net::SocketAddr;
+use std::net::{IpAddr, Ipv4Addr};
 use std::time::SystemTime;
 
 // DEFAULT VALUES
 /// Default host for server.
-pub const DEFAULT_HOST: IpAddr = IpAddr::V4(Ipv4Addr::new(0,0,0,0));
+pub const DEFAULT_HOST: IpAddr = IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0));
 /// Default port for server and client.
 pub const DEFAULT_PORT: u16 = 9992;
 
 #[derive(PartialEq)]
+/// Launch mode
 pub enum Mode {
     Server,
     Client,
@@ -29,6 +30,7 @@ impl fmt::Display for Mode {
 }
 
 #[derive(Serialize, Deserialize)]
+/// User session collected by client
 pub struct Session {
     /// Name of user relevant to the session
     pub user: String,
@@ -54,6 +56,7 @@ impl fmt::Display for Session {
 }
 
 #[derive(Serialize, Deserialize)]
+/// WireGuard peer collected by client
 pub struct WgPeer {
     /// WireGuard interface
     pub interface: String,
@@ -81,11 +84,19 @@ impl fmt::Display for WgPeer {
 pub type WgPeers = Vec<WgPeer>;
 pub type WgPeersResult = Result<WgPeers, String>;
 
+/// Instance of client that server maintains
 pub struct Client {
+    /// Serial number of client
+    ///
+    /// Each time a new client connects, the serial number should increase.
     pub serial: u32,
+    /// Socket address of client
     pub address: SocketAddr,
+    /// User sessions collected by client
     pub sessions: SessionsResult,
+    /// WireGuard peers collected by client
     pub wg_peers: WgPeersResult,
+    /// Last update received from client
     pub last_update: SystemTime,
 }
 
