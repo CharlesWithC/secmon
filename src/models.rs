@@ -3,8 +3,15 @@ use chrono::DateTime;
 use chrono::offset::Utc;
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::net::{IpAddr, Ipv4Addr};
 use std::net::SocketAddr;
 use std::time::SystemTime;
+
+// DEFAULT VALUES
+/// Default host for server.
+pub const DEFAULT_HOST: IpAddr = IpAddr::V4(Ipv4Addr::new(0,0,0,0));
+/// Default port for server and client.
+pub const DEFAULT_PORT: u16 = 9992;
 
 #[derive(PartialEq)]
 pub enum Mode {
@@ -174,6 +181,3 @@ impl fmt::Display for Message {
         }
     }
 }
-
-/// Default PORT that client and server agree
-pub const PORT: u16 = 9992;
