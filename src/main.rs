@@ -10,7 +10,7 @@ mod models;
 mod server;
 use crate::client::comm_server;
 use crate::models::{Client, DEFAULT_HOST, DEFAULT_PORT, Mode};
-use crate::server::{comm_client, init_client};
+use crate::server::comm_client;
 
 fn get_env_var<T: FromStr + ToString>(key: &str, default: Option<T>) -> T
 where
@@ -72,14 +72,8 @@ fn main() {
                 Ok(stream) => {
                     let mutex = Arc::clone(&mutex);
 
-                    let serial;
-                    {
-                        let (counter, clients) = &mut *mutex.lock().unwrap();
-                        serial = init_client(&stream, counter, clients);
-                    }
-
                     thread::spawn(move || {
-                        if let Err(e) = comm_client(stream, serial, mutex) {
+                        if let Err(e) = comm_client(stream, mutex) {
                             eprintln!("Connection error: {}", e);
                         }
                     });

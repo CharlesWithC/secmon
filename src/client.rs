@@ -1,4 +1,5 @@
 use anyhow::Result;
+use gethostname::gethostname;
 use std::net::TcpStream;
 
 mod exec;
@@ -11,6 +12,13 @@ use crate::models::{Command, Response};
 ///
 /// This is a blocking function and does not exit until connection is closed.
 pub fn comm_server(mut stream: TcpStream) -> Result<()> {
+    stream.write(&Response::Connect(
+        gethostname()
+            .to_str()
+            .map(|v| v.to_owned())
+            .unwrap_or(String::new()),
+    ))?;
+
     loop {
         let command = stream.read::<Command>()?;
         println!("Received {}", command);

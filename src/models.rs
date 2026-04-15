@@ -92,6 +92,8 @@ pub struct Client {
     ///
     /// Each time a new client connects, the serial number should increase.
     pub serial: u32,
+    /// Hostname of client
+    pub hostname: String,
     /// Socket address of client
     pub address: SocketAddr,
     /// User sessions collected by client
@@ -107,8 +109,9 @@ impl fmt::Display for Client {
         let last_update_datetime: DateTime<Utc> = self.last_update.into();
         write!(
             f,
-            "Client(serial={}, address=\"{}\", sessions[{}], wg_peers[{}], last_update=\"{}\")",
+            "Client(serial={}, hostname=\"{}\", address=\"{}\", sessions[{}], wg_peers[{}], last_update=\"{}\")",
             self.serial,
+            self.hostname,
             self.address,
             self.sessions
                 .as_ref()
@@ -183,8 +186,13 @@ impl fmt::Display for Command {
 #[derive(Serialize, Deserialize)]
 /// Represents a Message sent from client to server.
 pub enum Response {
-    /// `KeepAlive` message
+    /// `KeepAlive` acknowledgement
     KeepAlive,
+
+    /// Connection successful
+    /// 
+    /// This response is only sent once on connection establishment
+    Connect(Hostname),
 
     /// Report of Session and WgPeer
     Report(SessionsResult, WgPeersResult),
@@ -193,22 +201,27 @@ pub enum Response {
     Result(Success, Message),
 }
 
+pub type Hostname = String;
 pub type Success = bool;
 pub type Message = String;
 
 impl fmt::Display for Response {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Response::KeepAlive => write!(f, "Message::KeepAlive"),
+            Response::KeepAlive => write!(f, "Response::KeepAlive"),
+            Response::Connect(hostname) => write!(
+                f,
+                "Response::Connect(hostname=\"{hostname}\")"
+            ),
             Response::Report(sessions, wg_peers) => write!(
                 f,
-                "Message::Report(sessions[{}], wg_peers[{}])",
+                "Response::Report(sessions[{}], wg_peers[{}])",
                 sessions.as_ref().map(|v| v.len() as isize).unwrap_or(-1),
                 wg_peers.as_ref().map(|v| v.len() as isize).unwrap_or(-1),
             ),
             Response::Result(success, message) => write!(
                 f,
-                "Message::Result(success={success}, message=\"{message}\")"
+                "Response::Result(success={success}, message=\"{message}\")"
             ),
         }
     }
