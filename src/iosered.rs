@@ -1,8 +1,7 @@
 use serde::{Serialize, de::DeserializeOwned};
 use std::io::{Read, Result, Write};
-use std::net::TcpStream;
 
-/// Trait for serializing and deserializing data on streams.
+/// Trait for serializing and deserializing data.
 pub trait IOSerialized {
     /// Serialize `data` and write serialized data.
     fn write<T: Serialize>(&mut self, data: &T) -> Result<()>;
@@ -10,20 +9,18 @@ pub trait IOSerialized {
     fn read<T: DeserializeOwned>(&mut self) -> Result<T>;
 }
 
-/// Implementation of `IOSerialized` for `TcpStream`.
-/// 
-/// The length of serialized data is transmitted before the serialized data.
-/// 
+/// Implementation of `IOSerialized` for structs that implement `Read` and `Write`.
+///
+/// The length of serialized data is written before the serialized data.
+///
 /// The serialized data must be smaller than 4,294,967,296 bytes.
-impl IOSerialized for TcpStream {
-    /// Serialize `data` and write serialized data to `TcpStream`.
+impl<S: Read + Write> IOSerialized for S {
     fn write<T: Serialize>(&mut self, data: &T) -> Result<()> {
         let encoded = postcard::to_stdvec(data).expect("data should be serializable");
         self.write_all(&(encoded.len() as u32).to_be_bytes())?;
         self.write_all(&encoded)
     }
 
-    /// Read data from `TcpStream` and return deserialized data.
     fn read<T: DeserializeOwned>(&mut self) -> Result<T> {
         let mut len_buf = [0u8; 4];
         self.read_exact(&mut len_buf)?;

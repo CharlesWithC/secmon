@@ -6,9 +6,10 @@ use crate::models::{ClientState, ErrUpdateClient, Response};
 pub fn handle_response(
     serial: u32,
     response: Response,
-    mutex: &ClientState,
+    client_state: &ClientState,
 ) -> Result<(), ErrUpdateClient> {
-    let (_, clients) = &mut *mutex.lock().unwrap();
+    let mut guard = client_state.lock().unwrap();
+    let (_, ref mut clients) = *guard;
     if let Some(index) = clients.iter().position(|client| client.serial == serial) {
         match response {
             Response::Report(sessions, wg_peers) => {

@@ -32,7 +32,7 @@ impl fmt::Display for Mode {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
 /// User session collected by client
 pub struct Session {
     /// Name of user relevant to the session
@@ -58,7 +58,7 @@ impl fmt::Display for Session {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
 /// WireGuard peer collected by client
 pub struct WgPeer {
     /// WireGuard interface
@@ -102,6 +102,8 @@ pub struct Client {
     /// WireGuard peers collected by client
     pub wg_peers: WgPeersResult,
     /// Last update received from client
+    ///
+    /// Note: This is only updated when a new report is received
     pub last_update: SystemTime,
 }
 
@@ -146,15 +148,13 @@ impl fmt::Display for ErrUpdateClient {
 #[derive(Serialize, Deserialize)]
 /// Reprents a Command sent from server to client.
 pub enum Command {
-    /// Request a `KeepAlive` message from client
+    /// Request a `KeepAlive` response from client
     KeepAlive,
 
     /// Request a single report of Session and WgPeer
     Report,
 
     /// Request client to sync report updates until stopped
-    ///
-    /// `ReportSyncStop` must be used before sending another command
     ReportSyncStart,
 
     /// Request client to stop syncing report updates
@@ -214,13 +214,22 @@ pub enum Response {
     /// Report of Session and WgPeer
     Report(SessionsResult, WgPeersResult),
 
+    /// Report sync status
+    ///
+    /// This response is used on `ReportSyncStart` and `ReportSyncStop` commands
+    ReportSync(Enabled),
+
     /// Generic result of a command
     Result(Success, Message),
 }
 
 pub type Hostname = String;
+pub type Enabled = bool;
 pub type Success = bool;
 pub type Message = String;
+
+pub type ReportState = Arc<Mutex<(SessionsResult, WgPeersResult, UpdateTime)>>;
+pub type UpdateTime = SystemTime;
 
 impl fmt::Display for Response {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -233,6 +242,7 @@ impl fmt::Display for Response {
                 sessions.as_ref().map(|v| v.len() as isize).unwrap_or(-1),
                 wg_peers.as_ref().map(|v| v.len() as isize).unwrap_or(-1),
             ),
+            Response::ReportSync(enabled) => write!(f, "Response::ReportSync(enabled={enabled})"),
             Response::Result(success, message) => write!(
                 f,
                 "Response::Result(success={success}, message=\"{message}\")"

@@ -2,8 +2,7 @@ use anyhow::Result;
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
-use std::time::SystemTime;
+use std::time::UNIX_EPOCH;
 
 use crate::iosered::IOSerialized;
 use crate::models::{Client, ClientState, Command, ErrUpdateClient, Response};
@@ -14,8 +13,9 @@ use crate::server::response::handle_response;
 /// Initialize client connection in `clients` list.
 ///
 /// Returns `serial` of the client for later identification.
-fn handle_new_client(address: &SocketAddr, hostname: &String, mutex: &ClientState) -> u32 {
-    let (counter, clients) = &mut *mutex.lock().unwrap();
+fn handle_new_client(address: &SocketAddr, hostname: &String, client_state: &ClientState) -> u32 {
+    let mut guard = client_state.lock().unwrap();
+    let (ref mut counter, ref mut clients) = *guard;
 
     // increment counter for client
     *counter += 1;
@@ -25,9 +25,9 @@ fn handle_new_client(address: &SocketAddr, hostname: &String, mutex: &ClientStat
         serial: *counter,
         address: address.clone(),
         hostname: hostname.clone(),
-        sessions: Ok(Vec::new()),
-        wg_peers: Ok(Vec::new()),
-        last_update: SystemTime::now(),
+        sessions: Err("Initializing".to_owned()),
+        wg_peers: Err("Initializing".to_owned()),
+        last_update: UNIX_EPOCH,
     };
     clients.push(client);
 
@@ -38,42 +38,38 @@ fn handle_new_client(address: &SocketAddr, hostname: &String, mutex: &ClientStat
 /// Main thread function for each client connection
 ///
 /// This is a blocking function and does not exit unless interrupted.
-fn thread_main(mut stream: TcpStream, mutex: ClientState) -> Result<()> {
+fn thread_main(mut stream: TcpStream, client_state: ClientState) -> Result<()> {
     let mut serial;
     let address = stream.peer_addr().unwrap();
     let hostname;
 
     if let Response::Connect(_hostname) = stream.read::<Response>()? {
         hostname = _hostname;
-        serial = handle_new_client(&address, &hostname, &mutex);
+        serial = handle_new_client(&address, &hostname, &client_state);
+        println!("{address} connected as {hostname} and was assigned serial {serial}");
     } else {
         return Err(anyhow::anyhow!(
             "Invalid initial response: Should be Response::Connect"
         ));
     }
 
-    println!("{address} connected as {hostname}");
+    let command = Command::ReportSyncStart;
+    println!("Sending {command} to {address}");
+    stream.write(&command)?;
 
     loop {
-        let command = Command::Report;
-
-        println!("Sending {} to {address}", command);
-        stream.write(&command)?;
-
         let response = stream.read::<Response>()?;
         println!("{address} responded {response}");
 
-        let result = handle_response(serial, response, &mutex);
+        let result = handle_response(serial, response, &client_state);
         if let Err(error) = result {
             match error {
                 ErrUpdateClient::SerialNotRecognized => {
                     eprintln!("{address} is not a recognized client");
-                    serial = handle_new_client(&address, &hostname, &mutex);
+                    serial = handle_new_client(&address, &hostname, &client_state);
                 }
             }
         }
-
-        thread::sleep(Duration::from_secs(5));
     }
 }
 
@@ -83,15 +79,15 @@ fn thread_main(mut stream: TcpStream, mutex: ClientState) -> Result<()> {
 pub fn main(listener: TcpListener) -> Result<()> {
     // mutex = (counter: u32, clients: Vec(Client))
     // 'counter' helps find the entry in the vector for the client
-    let mutex = Arc::new(Mutex::new((0, Vec::<Client>::new())));
+    let client_state: ClientState = Arc::new(Mutex::new((0, Vec::<Client>::new())));
 
     for stream in listener.incoming() {
         match stream {
             Ok(stream) => {
-                let mutex = Arc::clone(&mutex);
+                let client_state = Arc::clone(&client_state);
 
                 thread::spawn(move || {
-                    if let Err(e) = thread_main(stream, mutex) {
+                    if let Err(e) = thread_main(stream, client_state) {
                         eprintln!("Connection error: {}", e);
                     }
                 });
