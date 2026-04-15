@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::net::SocketAddr;
 use std::net::{IpAddr, Ipv4Addr};
+use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
 // DEFAULT VALUES
@@ -92,10 +93,10 @@ pub struct Client {
     ///
     /// Each time a new client connects, the serial number should increase.
     pub serial: u32,
-    /// Hostname of client
-    pub hostname: String,
     /// Socket address of client
     pub address: SocketAddr,
+    /// Hostname of client
+    pub hostname: String,
     /// User sessions collected by client
     pub sessions: SessionsResult,
     /// WireGuard peers collected by client
@@ -103,6 +104,8 @@ pub struct Client {
     /// Last update received from client
     pub last_update: SystemTime,
 }
+
+pub type ClientState = Arc<Mutex<(u32, Vec<Client>)>>;
 
 impl fmt::Display for Client {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -123,6 +126,20 @@ impl fmt::Display for Client {
                 .unwrap_or(-1),
             last_update_datetime.format("%F %T")
         )
+    }
+}
+
+/// Error on updating client information
+pub enum ErrUpdateClient {
+    /// Client cannot be recognized based on serial
+    SerialNotRecognized,
+}
+
+impl fmt::Display for ErrUpdateClient {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ErrUpdateClient::SerialNotRecognized => write!(f, "SerialNotRecognized"),
+        }
     }
 }
 
@@ -190,7 +207,7 @@ pub enum Response {
     KeepAlive,
 
     /// Connection successful
-    /// 
+    ///
     /// This response is only sent once on connection establishment
     Connect(Hostname),
 
@@ -209,10 +226,7 @@ impl fmt::Display for Response {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Response::KeepAlive => write!(f, "Response::KeepAlive"),
-            Response::Connect(hostname) => write!(
-                f,
-                "Response::Connect(hostname=\"{hostname}\")"
-            ),
+            Response::Connect(hostname) => write!(f, "Response::Connect(hostname=\"{hostname}\")"),
             Response::Report(sessions, wg_peers) => write!(
                 f,
                 "Response::Report(sessions[{}], wg_peers[{}])",

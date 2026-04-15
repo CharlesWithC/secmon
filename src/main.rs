@@ -1,16 +1,12 @@
 use std::net::{IpAddr, TcpListener, TcpStream};
 use std::str::FromStr;
-use std::sync::{Arc, Mutex};
-use std::thread;
 use std::{env, process};
 
 mod client;
 mod iosered;
 mod models;
 mod server;
-use crate::client::comm_server;
-use crate::models::{Client, DEFAULT_HOST, DEFAULT_PORT, Mode};
-use crate::server::comm_client;
+use crate::models::{DEFAULT_HOST, DEFAULT_PORT, Mode};
 
 fn get_env_var<T: FromStr + ToString>(key: &str, default: Option<T>) -> T
 where
@@ -63,31 +59,14 @@ fn main() {
         let listener = TcpListener::bind((ip, port)).unwrap();
         println!("Server listening on {ip}:{port}");
 
-        // mutex = (counter: u32, clients: Vec(Client))
-        // 'counter' helps find the entry in the vector for the client
-        let mutex = Arc::new(Mutex::new((0, Vec::<Client>::new())));
-
-        for stream in listener.incoming() {
-            match stream {
-                Ok(stream) => {
-                    let mutex = Arc::clone(&mutex);
-
-                    thread::spawn(move || {
-                        if let Err(e) = comm_client(stream, mutex) {
-                            eprintln!("Connection error: {}", e);
-                        }
-                    });
-                }
-                Err(e) => {
-                    eprintln!("TcpStream error: {}", e);
-                }
-            };
+        if let Err(e) = crate::server::main(listener) {
+            eprintln!("Connection error: {}", e);
         }
     } else if mode == Mode::Client {
         let stream = TcpStream::connect((ip, port)).unwrap();
         println!("Connected to server {ip}:{port}");
 
-        if let Err(e) = comm_server(stream) {
+        if let Err(e) = crate::client::main(stream) {
             eprintln!("Connection error: {}", e);
         }
     }

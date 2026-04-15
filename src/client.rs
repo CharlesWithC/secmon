@@ -10,8 +10,8 @@ use crate::models::{Command, Response};
 
 /// Client-side main function to communicate with server.
 ///
-/// This is a blocking function and does not exit until connection is closed.
-pub fn comm_server(mut stream: TcpStream) -> Result<()> {
+/// This is a blocking function and does not exit unless interrupted.
+pub fn main(mut stream: TcpStream) -> Result<()> {
     stream.write(&Response::Connect(
         gethostname()
             .to_str()
