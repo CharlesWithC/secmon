@@ -5,7 +5,7 @@ mod exec;
 mod report;
 use crate::client::report::get_report;
 use crate::iosered::IOSerialized;
-use crate::models::{Command, Message};
+use crate::models::{Command, Response};
 
 /// Client-side main function to communicate with server.
 ///
@@ -18,11 +18,11 @@ pub fn comm_server(mut stream: TcpStream) -> Result<()> {
         match command {
             Command::Report => {
                 let (sessions, wg_peers) = get_report();
-                stream.write(&Message::Report(sessions, wg_peers))?;
+                stream.write(&Response::Report(sessions, wg_peers))?;
             }
             _ => {
                 eprintln!("Not implemented");
-                stream.write(&Message::Result(false, "not implemented".to_owned()))?;
+                stream.write(&Response::Result(false, "not implemented".to_owned()))?;
             }
         }
     }

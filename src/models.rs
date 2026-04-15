@@ -13,6 +13,8 @@ pub const DEFAULT_HOST: IpAddr = IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0));
 /// Default port for server and client.
 pub const DEFAULT_PORT: u16 = 9992;
 
+pub type ErrorMessage = String;
+
 #[derive(PartialEq)]
 /// Launch mode
 pub enum Mode {
@@ -41,7 +43,7 @@ pub struct Session {
 }
 
 pub type Sessions = Vec<Session>;
-pub type SessionsResult = Result<Sessions, String>;
+pub type SessionsResult = Result<Sessions, ErrorMessage>;
 
 impl fmt::Display for Session {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -68,6 +70,9 @@ pub struct WgPeer {
     pub latest_handshake: Option<String>,
 }
 
+pub type WgPeers = Vec<WgPeer>;
+pub type WgPeersResult = Result<WgPeers, ErrorMessage>;
+
 impl fmt::Display for WgPeer {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
@@ -80,9 +85,6 @@ impl fmt::Display for WgPeer {
         )
     }
 }
-
-pub type WgPeers = Vec<WgPeer>;
-pub type WgPeersResult = Result<WgPeers, String>;
 
 /// Instance of client that server maintains
 pub struct Client {
@@ -124,28 +126,40 @@ impl fmt::Display for Client {
 #[derive(Serialize, Deserialize)]
 /// Reprents a Command sent from server to client.
 pub enum Command {
-    /// Request a report of Session and WgPeer
+    /// Request a `KeepAlive` message from client
+    KeepAlive,
+
+    /// Request a single report of Session and WgPeer
     Report,
 
+    /// Request client to sync report updates until stopped
+    ///
+    /// `ReportSyncStop` must be used before sending another command
+    ReportSyncStart,
+
+    /// Request client to stop syncing report updates
+    ReportSyncStop,
+
     /// Enable a systemctl service
-    ///
-    /// `bool` is whether to add '--now' flag
-    ///
-    /// `String` is the service name
-    ServiceEnable(bool, String),
+    ServiceEnable(FlagNow, ServiceName),
 
     /// Disable a systemctl service
-    ///
-    /// `bool` is whether to add '--now' flag
-    ///
-    /// `String` is the service name
-    ServiceDisable(bool, String),
+    ServiceDisable(FlagNow, ServiceName),
+
+    /// Reboot client server at a specific time
+    Reboot(SystemTime),
 }
+
+pub type FlagNow = bool;
+pub type ServiceName = String;
 
 impl fmt::Display for Command {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            Command::KeepAlive => write!(f, "Command::KeepAlive"),
             Command::Report => write!(f, "Command::Report"),
+            Command::ReportSyncStart => write!(f, "Command::ReportSyncStart"),
+            Command::ReportSyncStop => write!(f, "Command::ReportSyncStop"),
             Command::ServiceEnable(now, service) => {
                 write!(
                     f,
@@ -158,34 +172,41 @@ impl fmt::Display for Command {
                     "Command::ServiceDisable(now={now}, service=\"{service}\")"
                 )
             }
+            Command::Reboot(time) => {
+                let time: DateTime<Utc> = (*time).into();
+                write!(f, "Command::Reboot(time=\"{}\")", time.format("%F %T"))
+            }
         }
     }
 }
 
 #[derive(Serialize, Deserialize)]
 /// Represents a Message sent from client to server.
-pub enum Message {
+pub enum Response {
+    /// `KeepAlive` message
+    KeepAlive,
+
     /// Report of Session and WgPeer
     Report(SessionsResult, WgPeersResult),
 
     /// Generic result of a command
-    ///
-    /// `bool` is whether the command succeeded
-    ///
-    /// `String` is the message of the result
-    Result(bool, String),
+    Result(Success, Message),
 }
 
-impl fmt::Display for Message {
+pub type Success = bool;
+pub type Message = String;
+
+impl fmt::Display for Response {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Message::Report(sessions, wg_peers) => write!(
+            Response::KeepAlive => write!(f, "Message::KeepAlive"),
+            Response::Report(sessions, wg_peers) => write!(
                 f,
                 "Message::Report(sessions[{}], wg_peers[{}])",
                 sessions.as_ref().map(|v| v.len() as isize).unwrap_or(-1),
                 wg_peers.as_ref().map(|v| v.len() as isize).unwrap_or(-1),
             ),
-            Message::Result(success, message) => write!(
+            Response::Result(success, message) => write!(
                 f,
                 "Message::Result(success={success}, message=\"{message}\")"
             ),

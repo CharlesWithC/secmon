@@ -6,7 +6,7 @@ use std::time::Duration;
 use std::time::SystemTime;
 
 use crate::iosered::IOSerialized;
-use crate::models::{Client, Command, Message};
+use crate::models::{Client, Command, Response};
 
 pub type ClientState = Arc<Mutex<(u32, Vec<Client>)>>;
 
@@ -47,12 +47,12 @@ pub fn comm_client(mut stream: TcpStream, mut serial: u32, mutex: ClientState) -
         println!("Sending {} to {address}", command);
         stream.write(&command)?;
 
-        let message = stream.read::<Message>()?;
+        let message = stream.read::<Response>()?;
         let (counter, clients) = &mut *mutex.lock().unwrap();
         if let Some(index) = clients.iter().position(|client| client.serial == serial) {
             println!("{address} responded {message}");
             match message {
-                Message::Report(sessions, wg_peers) => {
+                Response::Report(sessions, wg_peers) => {
                     match &sessions {
                         Ok(sessions) => {
                             for session in sessions.iter() {
