@@ -18,14 +18,10 @@ pub fn handle_command(
             stream.write(&Response::Report(sessions.clone(), wg_peers.clone()))?;
         }
         Command::ReportSyncStart => {
-            stream.set_nonblocking(true)?;
-
             *report_sync = true;
             stream.write(&Response::ReportSync(true))?;
         }
         Command::ReportSyncStop => {
-            stream.set_nonblocking(true)?;
-
             *report_sync = false;
             stream.write(&Response::ReportSync(false))?;
         }

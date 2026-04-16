@@ -17,6 +17,9 @@ use crate::models::{Command, ReportState, Response};
 ///
 /// This is a blocking function and does not exit unless interrupted.
 pub fn main(mut stream: TcpStream) -> Result<()> {
+    // use nonblocking to reduce complexity and send keep-alive messages
+    stream.set_nonblocking(true)?;
+
     // start thread to get report in the background
     let report_state: ReportState = Arc::new(Mutex::new((
         Err("Initializing".to_owned()),
@@ -46,49 +49,37 @@ pub fn main(mut stream: TcpStream) -> Result<()> {
     loop {
         let mut command_opt = None;
 
-        if report_sync {
-            // when report_sync=true, stream is non-blocking
-            // we peek to check if there is a command to be read
-            let mut _buf = [0u8; 4];
-            match stream.peek(&mut _buf) {
-                Ok(_) => command_opt = Some(stream.read::<Command>()?),
-                Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
-                Err(e) => panic!("encountered IO error: {e}"),
-            };
-        } else {
-            // when report_sync=false, stream is blocking
-            // we read the command directly
-            command_opt = Some(stream.read::<Command>()?);
-        }
+        let mut _buf = [0u8; 4];
+        match stream.peek(&mut _buf) {
+            Ok(_) => command_opt = Some(stream.read::<Command>()?),
+            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
+            Err(e) => panic!("encountered IO error: {e}"),
+        };
 
         if let Some(command) = command_opt {
-            // handle command if received regardless of report_sync value
-            // server should call ReportSyncStop if report_sync=true
-            // this ensures no Report is responded while a command is being sent
-            // however, this recommendation is not enforced
             println!("Received {command}");
             handle_command(&mut stream, command, &report_state, &mut report_sync)?;
-        } else {
-            // command_opt may only be None when report_sync=false
-            // we double check report_sync value in case more sync features are added in the future
-            if report_sync {
-                let guard = report_state.lock().unwrap();
-                let (ref sessions, ref wg_peers, ref update_time) = *guard;
-                // only sync if there is an update
-                if *update_time > report_sync_last_update {
-                    stream.write(&Response::Report(sessions.clone(), wg_peers.clone()))?;
-                    report_sync_last_update = *update_time;
-                    last_keepalive = SystemTime::now();
-                }
-            }
+        }
 
-            // keep-alive should be used 
-            if SystemTime::now() - Duration::from_secs(30) >= last_keepalive {
-                stream.write(&Response::KeepAlive)?;
+        // server should deal with report_sync reports gracefully,
+        // in case a report is responded while a command is being sent
+        // i.e. server should quietly update report even if it's expecting another response
+        if report_sync {
+            let guard = report_state.lock().unwrap();
+            let (ref sessions, ref wg_peers, ref update_time) = *guard;
+            // only sync if there is an update
+            if *update_time > report_sync_last_update {
+                stream.write(&Response::Report(sessions.clone(), wg_peers.clone()))?;
+                report_sync_last_update = *update_time;
                 last_keepalive = SystemTime::now();
             }
-
-            thread::sleep(Duration::from_secs(1));
         }
+
+        if SystemTime::now() - Duration::from_secs(60) >= last_keepalive {
+            stream.write(&Response::KeepAlive)?;
+            last_keepalive = SystemTime::now();
+        }
+
+        thread::sleep(Duration::from_secs(1));
     }
 }
