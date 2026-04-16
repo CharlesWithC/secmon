@@ -1,8 +1,10 @@
 use crate::client::exec::exec;
-use crate::models::{Session, SessionsResult, WgPeer, WgPeersResult};
+use crate::models::{ReportState, Session, SessionsResult, WgPeer, WgPeersResult};
+use std::thread;
+use std::time::{Duration, SystemTime};
 
 /// Executes `who -w` and returns parsed result.
-/// 
+///
 /// If an error occurs, returns a string-based error.
 pub fn get_sessions() -> SessionsResult {
     let output = exec("who", &["-w"])?;
@@ -39,7 +41,7 @@ pub fn get_sessions() -> SessionsResult {
 }
 
 /// Executes `wg` and returns parsed result.
-/// 
+///
 /// If an error occurs, returns a string-based error.
 pub fn get_wg_peers() -> WgPeersResult {
     let output = exec("wg", &[])?;
@@ -104,4 +106,21 @@ pub fn get_report() -> (SessionsResult, WgPeersResult) {
     let wg_peers = get_wg_peers();
 
     (sessions, wg_peers)
+}
+
+/// A blocking function that fetchs report every second and updates `report_state`.
+pub fn thread_get_report(report_state: ReportState) -> () {
+    loop {
+        let (sessions, wg_peers) = get_report();
+
+        {
+            let mut guard = report_state.lock().unwrap();
+            let (ref mut s, ref mut w, ref mut t) = *guard;
+            if *s != sessions || *w != wg_peers {
+                (*s, *w, *t) = (sessions, wg_peers, SystemTime::now());
+            }
+        }
+
+        thread::sleep(Duration::from_secs(1));
+    }
 }

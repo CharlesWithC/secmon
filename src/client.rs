@@ -3,30 +3,15 @@ use gethostname::gethostname;
 use std::net::TcpStream;
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+mod command;
 mod exec;
 mod report;
-use crate::client::report::get_report;
+use crate::client::command::handle_command;
+use crate::client::report::thread_get_report;
 use crate::iosered::IOSerialized;
 use crate::models::{Command, ReportState, Response};
-
-fn thread_get_report(report_state: ReportState) -> () {
-    loop {
-        let (sessions, wg_peers) = get_report();
-
-        {
-            let mut guard = report_state.lock().unwrap();
-            let (ref mut s, ref mut w, ref mut t) = *guard;
-            if *s != sessions || *w != wg_peers {
-                (*s, *w, *t) = (sessions, wg_peers, SystemTime::now());
-            }
-        }
-
-        thread::sleep(Duration::from_secs(1));
-    }
-}
 
 /// Client-side main function to communicate with server.
 ///
@@ -77,37 +62,19 @@ pub fn main(mut stream: TcpStream) -> Result<()> {
         }
 
         if let Some(command) = command_opt {
+            // handle command if received regardless of report_sync value
+            // server should call ReportSyncStop if report_sync=true
+            // this ensures no Report is responded while a command is being sent
+            // however, this recommendation is not enforced
             println!("Received {command}");
-
-            match command {
-                Command::Report => {
-                    let guard = report_state.lock().unwrap();
-                    let (ref sessions, ref wg_peers, _) = *guard;
-                    stream.write(&Response::Report(sessions.clone(), wg_peers.clone()))?;
-                }
-                Command::ReportSyncStart => {
-                    stream.set_nonblocking(true)?;
-
-                    report_sync = true;
-                    stream.write(&Response::ReportSync(true))?;
-                }
-                Command::ReportSyncStop => {
-                    stream.set_nonblocking(true)?;
-
-                    report_sync = false;
-                    stream.write(&Response::ReportSync(false))?;
-                }
-                _ => {
-                    eprintln!("Not implemented");
-                    stream.write(&Response::Result(false, "Not implemented".to_owned()))?;
-                }
-            }
+            handle_command(&mut stream, command, &report_state, &mut report_sync)?;
         } else {
             // command_opt may only be None when report_sync=false
             // we double check report_sync value in case more sync features are added in the future
             if report_sync {
                 let guard = report_state.lock().unwrap();
                 let (ref sessions, ref wg_peers, ref update_time) = *guard;
+                // only sync if there is an update
                 if *update_time > report_sync_last_update {
                     stream.write(&Response::Report(sessions.clone(), wg_peers.clone()))?;
                     report_sync_last_update = *update_time;
@@ -115,6 +82,7 @@ pub fn main(mut stream: TcpStream) -> Result<()> {
                 }
             }
 
+            // keep-alive should be used 
             if SystemTime::now() - Duration::from_secs(30) >= last_keepalive {
                 stream.write(&Response::KeepAlive)?;
                 last_keepalive = SystemTime::now();
