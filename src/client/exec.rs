@@ -1,11 +1,16 @@
 use anyhow::Result;
+use std::ffi::OsStr;
 use std::process::Command;
 
 /// Executes `program` with `args` and returns parsed output.
-/// 
+///
 /// If an error occurs, returns a string-based error.
-pub fn exec(program: &str, args: &[&str]) -> Result<String, String> {
-    let output = Command::new(program)
+pub fn exec<I, S>(program: S, args: I) -> Result<String, String>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr> + std::fmt::Display,
+{
+    let output = Command::new(&program)
         .args(args)
         .output()
         .map_err(|e| format!("Failed to execute '{program}': {}", e))?;

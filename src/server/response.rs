@@ -2,7 +2,7 @@ use std::time::SystemTime;
 
 use crate::models::{ClientState, ErrUpdateClient, Response};
 
-/// Processes response from client.
+/// Handles response from client.
 pub fn handle_response(
     serial: u32,
     response: Response,

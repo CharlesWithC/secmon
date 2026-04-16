@@ -58,7 +58,7 @@ pub fn main(mut stream: TcpStream) -> Result<()> {
 
         if let Some(command) = command_opt {
             println!("Received {command}");
-            handle_command(&mut stream, command, &report_state, &mut report_sync)?;
+            handle_command(&mut stream, &command, &report_state, &mut report_sync)?;
         }
 
         // server should deal with report_sync reports gracefully,

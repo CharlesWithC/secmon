@@ -166,12 +166,16 @@ pub enum Command {
     /// Disable a systemctl service
     ServiceDisable(FlagNow, ServiceName),
 
-    /// Reboot client server at a specific time
-    Reboot(SystemTime),
+    /// Schedule client server reboot
+    Reboot(Minutes),
+
+    /// Cancel client server reboot schedule
+    RebootCancel,
 }
 
 pub type FlagNow = bool;
 pub type ServiceName = String;
+pub type Minutes = u32;
 
 impl fmt::Display for Command {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -192,9 +196,11 @@ impl fmt::Display for Command {
                     "Command::ServiceDisable(now={now}, service=\"{service}\")"
                 )
             }
-            Command::Reboot(time) => {
-                let time: DateTime<Utc> = (*time).into();
-                write!(f, "Command::Reboot(time=\"{}\")", time.format("%F %T"))
+            Command::Reboot(minutes) => {
+                write!(f, "Command::Reboot(in=\"{}min\")", minutes)
+            }
+            Command::RebootCancel => {
+                write!(f, "Command::RebootCancel")
             }
         }
     }

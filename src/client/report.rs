@@ -7,7 +7,7 @@ use std::time::{Duration, SystemTime};
 ///
 /// If an error occurs, returns a string-based error.
 pub fn get_sessions() -> SessionsResult {
-    let output = exec("who", &["-w"])?;
+    let output = exec("who", ["-w"])?;
 
     let mut sessions = Vec::<Session>::new();
 
@@ -44,7 +44,7 @@ pub fn get_sessions() -> SessionsResult {
 ///
 /// If an error occurs, returns a string-based error.
 pub fn get_wg_peers() -> WgPeersResult {
-    let output = exec("wg", &[])?;
+    let output = exec("wg", [])?;
 
     let mut wg_peers = Vec::<WgPeer>::new();
 
