@@ -8,6 +8,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 mod handler;
 mod state;
 use crate::iosered::IOSerialized;
+use crate::models::Mode;
 use crate::models::node::NodeState;
 use crate::models::packet::{Command, Response};
 use crate::node::handler::{handle_command, update_node_state};
@@ -15,7 +16,7 @@ use crate::node::handler::{handle_command, update_node_state};
 /// Node-side main function to communicate with hub.
 ///
 /// This is a blocking function and does not exit unless interrupted.
-pub fn main(mut stream: TcpStream) -> Result<()> {
+pub fn main(mut stream: TcpStream, mode: Mode) -> Result<()> {
     // use nonblocking to reduce complexity and send keep-alive messages
     stream.set_nonblocking(true)?;
 
@@ -29,7 +30,7 @@ pub fn main(mut stream: TcpStream) -> Result<()> {
         let node_state = Arc::clone(&node_state);
         thread::spawn(move || {
             loop {
-                update_node_state(&node_state);
+                update_node_state(&node_state, &mode);
                 thread::sleep(Duration::from_secs(1));
             }
         });

@@ -3,8 +3,8 @@ use std::net::{IpAddr, Ipv4Addr};
 
 pub mod hub;
 pub mod node;
-pub mod packet;
 pub mod nodestate;
+pub mod packet;
 
 // DEFAULT VALUES
 /// Default host for hub.
@@ -15,15 +15,20 @@ pub const DEFAULT_PORT: u16 = 9992;
 #[derive(PartialEq)]
 /// Launch mode
 pub enum Mode {
+    /// Hub
     Hub,
-    Node,
+
+    /// Node(enable_sessions, enable_wg_peers)
+    Node(bool, bool),
 }
 
 impl fmt::Display for Mode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Mode::Hub => write!(f, "Mode::Hub"),
-            Mode::Node => write!(f, "Mode::Node"),
+            Mode::Node(sessions, wg_peers) => {
+                write!(f, "Mode::Node(sessions={sessions}, wg_peers={wg_peers})")
+            }
         }
     }
 }
