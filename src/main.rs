@@ -1,4 +1,5 @@
-use std::net::{IpAddr, TcpListener, TcpStream};
+use anyhow::Result;
+use std::net::IpAddr;
 use std::str::FromStr;
 use std::{env, process};
 
@@ -7,11 +8,15 @@ mod hub;
 mod iosered;
 mod models;
 mod node;
-use crate::models::{DEFAULT_HOST, DEFAULT_PORT, Mode};
+use crate::models::{DEFAULT_HOST, DEFAULT_PORT, Mode, NodeConfig};
 
 const USAGE: &str = "Usage:
-  secmon hub
-  secmon node [who] [wg]
+  secmon hub                    launch hub server
+  secmon node [who] [wg]        launch node server
+    [--reconnect]               reconnect if connection lost
+
+Hub control commands:
+  secmon list                   list all connected nodes
 
 Environment:
   HOST=<host> PORT=<port> secmon hub
@@ -37,6 +42,19 @@ where
         })
 }
 
+fn launch(ip: IpAddr, port: u16, mode: Mode) -> Result<()> {
+    match &mode {
+        &Mode::Hub => {
+            crate::hub::main(ip, port)?;
+        }
+        &Mode::Node(node_config) => loop {
+            crate::node::main(ip, port, node_config)?;
+        },
+    }
+
+    Ok(())
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
 
@@ -57,10 +75,15 @@ fn main() {
             ip = get_env_var("HUB_IP", None);
             port = get_env_var("HUB_PORT", Some(DEFAULT_PORT));
 
-            let sessions = args.contains(&"who".to_owned());
-            let wg_peers = args.contains(&"wg".to_owned());
+            let reconnect = args.contains(&"--reconnect".to_owned());
+            let enable_sessions = args.contains(&"who".to_owned());
+            let enable_wg_peers = args.contains(&"wg".to_owned());
 
-            Mode::Node(sessions, wg_peers)
+            Mode::Node(NodeConfig {
+                reconnect,
+                enable_sessions,
+                enable_wg_peers,
+            })
         }
         _ => {
             eprintln!("Invalid mode; Must be either 'hub' or 'node'");
@@ -68,22 +91,10 @@ fn main() {
         }
     };
 
-    match &mode {
-        &Mode::Hub => {
-            let listener = TcpListener::bind((ip, port)).unwrap();
-            println!("Hub listening on {ip}:{port}");
-
-            if let Err(e) = crate::hub::main(listener) {
-                eprintln!("Connection error: {}", e);
-            }
-        }
-        &Mode::Node(..) => {
-            let stream = TcpStream::connect((ip, port)).unwrap();
-            println!("Connected to hub {ip}:{port}");
-
-            if let Err(e) = crate::node::main(stream, mode) {
-                eprintln!("Connection error: {}", e);
-            }
-        }
+    if let Err(err) = launch(ip, port, mode) {
+        eprintln!("Error: {}", err);
+        process::exit(1);
+    } else {
+        process::exit(0);
     }
 }

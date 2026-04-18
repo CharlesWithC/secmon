@@ -12,23 +12,36 @@ pub const DEFAULT_HOST: IpAddr = IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0));
 /// Default port for hub and node.
 pub const DEFAULT_PORT: u16 = 9992;
 
-#[derive(PartialEq)]
 /// Launch mode
 pub enum Mode {
-    /// Hub
     Hub,
+    Node(NodeConfig),
+}
 
-    /// Node(enable_sessions, enable_wg_peers)
-    Node(bool, bool),
+#[derive(Clone, Copy)]
+pub struct NodeConfig {
+    pub reconnect: bool,
+    pub enable_sessions: bool,
+    pub enable_wg_peers: bool,
 }
 
 impl fmt::Display for Mode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Mode::Hub => write!(f, "Mode::Hub"),
-            Mode::Node(sessions, wg_peers) => {
-                write!(f, "Mode::Node(sessions={sessions}, wg_peers={wg_peers})")
+            Mode::Node(node_config) => {
+                write!(f, "Mode::Node({node_config})")
             }
         }
+    }
+}
+
+impl fmt::Display for NodeConfig {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "reconnect={}, sessions={}, wg_peers={}",
+            self.reconnect, self.enable_sessions, self.enable_wg_peers
+        )
     }
 }

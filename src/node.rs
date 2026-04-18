@@ -1,6 +1,6 @@
 use anyhow::Result;
 use gethostname::gethostname;
-use std::net::TcpStream;
+use std::net::{IpAddr, TcpStream};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -8,33 +8,19 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 mod handler;
 mod state;
 use crate::iosered::IOSerialized;
-use crate::models::Mode;
+use crate::models::NodeConfig;
 use crate::models::node::NodeState;
 use crate::models::packet::{Command, Response};
-use crate::node::handler::{handle_command, update_node_state};
 
-/// Node-side main function to communicate with hub.
+/// The real main function that handles commands and responses.
 ///
 /// This is a blocking function and does not exit unless interrupted.
-pub fn main(mut stream: TcpStream, mode: Mode) -> Result<()> {
+fn worker(ip: IpAddr, port: u16, node_state: NodeState) -> Result<()> {
+    let mut stream = TcpStream::connect((ip, port))?;
+    println!("Connected to hub {ip}:{port}");
+
     // use nonblocking to reduce complexity and send keep-alive messages
     stream.set_nonblocking(true)?;
-
-    let node_state: NodeState = Arc::new(Mutex::new((
-        Err("Initializing".to_owned()),
-        Err("Initializing".to_owned()),
-        UNIX_EPOCH,
-    )));
-    {
-        // start thread to update node state in the background
-        let node_state = Arc::clone(&node_state);
-        thread::spawn(move || {
-            loop {
-                update_node_state(&node_state, &mode);
-                thread::sleep(Duration::from_secs(1));
-            }
-        });
-    }
 
     // respond hostname on new connection
     stream.write(&Response::Connect(
@@ -56,12 +42,12 @@ pub fn main(mut stream: TcpStream, mode: Mode) -> Result<()> {
         match stream.peek(&mut _buf) {
             Ok(_) => command_opt = Some(stream.read::<Command>()?),
             Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
-            Err(e) => panic!("encountered IO error: {e}"),
+            Err(e) => Err(e)?,
         };
 
         if let Some(command) = command_opt {
             println!("Received {command}");
-            handle_command(&mut stream, &command, &node_state, &mut state_sync)?;
+            handler::handle_command(&mut stream, &command, &node_state, &mut state_sync)?;
         }
 
         // hub should deal with state_sync response gracefully,
@@ -84,5 +70,58 @@ pub fn main(mut stream: TcpStream, mode: Mode) -> Result<()> {
         }
 
         thread::sleep(Duration::from_secs(1));
+    }
+}
+
+/// Node-side main function to communicate with hub.
+///
+/// This function initializes `node_state` and threads, then hands off to `worker`.
+///
+/// This is a blocking function and does not exit unless interrupted.
+pub fn main(ip: IpAddr, port: u16, node_config: NodeConfig) -> Result<()> {
+    loop {
+        let result = thread::scope(|s| {
+            let terminate_flag = Arc::new(Mutex::new(false));
+            let node_state: NodeState = Arc::new(Mutex::new((
+                Err("Initializing".to_owned()),
+                Err("Initializing".to_owned()),
+                UNIX_EPOCH,
+            )));
+
+            {
+                // if worker is down, then kill thread to update state to save resources
+                let terminate_flag = Arc::clone(&terminate_flag);
+                let node_state = Arc::clone(&node_state);
+                s.spawn(move || {
+                    loop {
+                        if *terminate_flag.lock().unwrap() {
+                            return;
+                        }
+                        handler::update_node_state(node_config, &node_state);
+                        thread::sleep(Duration::from_secs(1));
+                    }
+                });
+            }
+
+            let result = worker(ip, port, node_state);
+            *terminate_flag.lock().unwrap() = true;
+
+            if let Err(err) = result {
+                Err(err)
+            } else {
+                Ok(())
+            }
+        });
+
+        if let Err(err) = result {
+            if !node_config.reconnect {
+                return Err(err);
+            }
+        } else {
+            return Ok(());
+        }
+
+        println!("Reconnecting in 5 seconds...");
+        thread::sleep(Duration::from_secs(5));
     }
 }

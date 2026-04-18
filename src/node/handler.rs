@@ -4,7 +4,7 @@ use std::time::SystemTime;
 
 use crate::exec::exec;
 use crate::iosered::IOSerialized;
-use crate::models::Mode;
+use crate::models::NodeConfig;
 use crate::models::node::NodeState;
 use crate::models::packet::{Command, Response};
 use crate::node::state::{get_sessions, get_wg_peers};
@@ -78,29 +78,24 @@ pub fn handle_command(
 }
 
 /// Fetches state and updates `node_state`.
-pub fn update_node_state(node_state: &NodeState, mode: &Mode) -> () {
-    match mode {
-        &Mode::Node(enable_sessions, enable_wg_peers) => {
-            let sessions = if enable_sessions {
-                get_sessions()
-            } else {
-                Err("Not monitored".to_owned())
-            };
+pub fn update_node_state(node_config: NodeConfig, node_state: &NodeState) -> () {
+    let sessions = if node_config.enable_sessions {
+        get_sessions()
+    } else {
+        Err("Not monitored".to_owned())
+    };
 
-            let wg_peers = if enable_wg_peers {
-                get_wg_peers()
-            } else {
-                Err("Not monitored".to_owned())
-            };
+    let wg_peers = if node_config.enable_wg_peers {
+        get_wg_peers()
+    } else {
+        Err("Not monitored".to_owned())
+    };
 
-            {
-                let mut guard = node_state.lock().unwrap();
-                let (ref mut s, ref mut w, ref mut t) = *guard;
-                if *s != sessions || *w != wg_peers {
-                    (*s, *w, *t) = (sessions, wg_peers, SystemTime::now());
-                }
-            }
+    {
+        let mut guard = node_state.lock().unwrap();
+        let (ref mut s, ref mut w, ref mut t) = *guard;
+        if *s != sessions || *w != wg_peers {
+            (*s, *w, *t) = (sessions, wg_peers, SystemTime::now());
         }
-        _ => panic!("should not happen"),
     }
 }
