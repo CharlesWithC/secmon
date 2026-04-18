@@ -5,31 +5,33 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-mod command;
-mod exec;
-mod report;
-use crate::client::command::handle_command;
-use crate::client::report::thread_get_report;
+mod handler;
+mod state;
 use crate::iosered::IOSerialized;
-use crate::models::{Command, ReportState, Response};
+use crate::models::node::NodeState;
+use crate::models::packet::{Command, Response};
+use crate::node::handler::{handle_command, update_node_state};
 
-/// Client-side main function to communicate with server.
+/// Node-side main function to communicate with hub.
 ///
 /// This is a blocking function and does not exit unless interrupted.
 pub fn main(mut stream: TcpStream) -> Result<()> {
     // use nonblocking to reduce complexity and send keep-alive messages
     stream.set_nonblocking(true)?;
 
-    // start thread to get report in the background
-    let report_state: ReportState = Arc::new(Mutex::new((
+    let node_state: NodeState = Arc::new(Mutex::new((
         Err("Initializing".to_owned()),
         Err("Initializing".to_owned()),
         UNIX_EPOCH,
     )));
     {
-        let report_state = Arc::clone(&report_state);
+        // start thread to update node state in the background
+        let node_state = Arc::clone(&node_state);
         thread::spawn(move || {
-            thread_get_report(report_state);
+            loop {
+                update_node_state(&node_state);
+                thread::sleep(Duration::from_secs(1));
+            }
         });
     }
 
@@ -41,9 +43,9 @@ pub fn main(mut stream: TcpStream) -> Result<()> {
             .unwrap_or(String::new()),
     ))?;
 
-    // initialize variables for report_sync feature
-    let mut report_sync = false;
-    let mut report_sync_last_update = UNIX_EPOCH;
+    // initialize variables for state_sync feature
+    let mut state_sync = false;
+    let mut state_sync_last_update = UNIX_EPOCH;
     let mut last_keepalive = SystemTime::now();
 
     loop {
@@ -58,19 +60,19 @@ pub fn main(mut stream: TcpStream) -> Result<()> {
 
         if let Some(command) = command_opt {
             println!("Received {command}");
-            handle_command(&mut stream, &command, &report_state, &mut report_sync)?;
+            handle_command(&mut stream, &command, &node_state, &mut state_sync)?;
         }
 
-        // server should deal with report_sync reports gracefully,
-        // in case a report is responded while a command is being sent
-        // i.e. server should quietly update report even if it's expecting another response
-        if report_sync {
-            let guard = report_state.lock().unwrap();
+        // hub should deal with state_sync response gracefully,
+        // in case a node state is responded while another command is being sent
+        // i.e. hub should quietly update node state even if it's expecting different response
+        if state_sync {
+            let guard = node_state.lock().unwrap();
             let (ref sessions, ref wg_peers, ref update_time) = *guard;
             // only sync if there is an update
-            if *update_time > report_sync_last_update {
-                stream.write(&Response::Report(sessions.clone(), wg_peers.clone()))?;
-                report_sync_last_update = *update_time;
+            if *update_time > state_sync_last_update {
+                stream.write(&Response::NodeState(sessions.clone(), wg_peers.clone()))?;
+                state_sync_last_update = *update_time;
                 last_keepalive = SystemTime::now();
             }
         }

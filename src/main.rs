@@ -2,10 +2,11 @@ use std::net::{IpAddr, TcpListener, TcpStream};
 use std::str::FromStr;
 use std::{env, process};
 
-mod client;
+mod exec;
+mod hub;
 mod iosered;
 mod models;
-mod server;
+mod node;
 use crate::models::{DEFAULT_HOST, DEFAULT_PORT, Mode};
 
 fn get_env_var<T: FromStr + ToString>(key: &str, default: Option<T>) -> T
@@ -32,41 +33,41 @@ fn main() {
     let args: Vec<String> = env::args().collect();
 
     if args.len() != 2 {
-        eprintln!("Usage: secmon <server|client>");
+        eprintln!("Usage: secmon <hub|node>");
         process::exit(1);
     }
 
     let ip: IpAddr;
     let port: u16;
     let mode = match args.get(1).unwrap().as_str() {
-        "server" => {
+        "hub" => {
             ip = get_env_var("HOST", Some(DEFAULT_HOST));
             port = get_env_var("PORT", Some(DEFAULT_PORT));
-            Mode::Server
+            Mode::Hub
         }
-        "client" => {
-            ip = get_env_var("SERVER_IP", None);
-            port = get_env_var("SERVER_PORT", Some(DEFAULT_PORT));
-            Mode::Client
+        "node" => {
+            ip = get_env_var("HUB_IP", None);
+            port = get_env_var("HUB_PORT", Some(DEFAULT_PORT));
+            Mode::Node
         }
         _ => {
-            eprintln!("Invalid mode; Must be either 'server' or 'client'");
+            eprintln!("Invalid mode; Must be either 'hub' or 'node'");
             process::exit(1);
         }
     };
 
-    if mode == Mode::Server {
+    if mode == Mode::Hub {
         let listener = TcpListener::bind((ip, port)).unwrap();
-        println!("Server listening on {ip}:{port}");
+        println!("Hub listening on {ip}:{port}");
 
-        if let Err(e) = crate::server::main(listener) {
+        if let Err(e) = crate::hub::main(listener) {
             eprintln!("Connection error: {}", e);
         }
-    } else if mode == Mode::Client {
+    } else if mode == Mode::Node {
         let stream = TcpStream::connect((ip, port)).unwrap();
-        println!("Connected to server {ip}:{port}");
+        println!("Connected to hub {ip}:{port}");
 
-        if let Err(e) = crate::client::main(stream) {
+        if let Err(e) = crate::node::main(stream) {
             eprintln!("Connection error: {}", e);
         }
     }

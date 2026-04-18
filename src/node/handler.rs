@@ -1,9 +1,12 @@
 use anyhow::Result;
 use std::net::TcpStream;
+use std::time::SystemTime;
 
-use crate::client::exec::exec;
+use crate::exec::exec;
 use crate::iosered::IOSerialized;
-use crate::models::{Command, ReportState, Response};
+use crate::models::node::NodeState;
+use crate::models::packet::{Command, Response};
+use crate::node::state::{get_sessions, get_wg_peers};
 
 /// Returns `Response::Result` constructed from `Result`.
 fn response_result(result: Result<String, String>) -> Response {
@@ -13,29 +16,29 @@ fn response_result(result: Result<String, String>) -> Response {
     }
 }
 
-/// Handles command from server.
+/// Handles command from hub.
 pub fn handle_command(
     stream: &mut TcpStream,
     command: &Command,
-    report_state: &ReportState,
-    report_sync: &mut bool,
+    node_state: &NodeState,
+    state_sync: &mut bool,
 ) -> Result<()> {
     match command {
         Command::KeepAlive => {
             stream.write(&Response::KeepAlive)?;
         }
-        Command::Report => {
-            let guard = report_state.lock().unwrap();
+        Command::NodeState => {
+            let guard = node_state.lock().unwrap();
             let (ref sessions, ref wg_peers, _) = *guard;
-            stream.write(&Response::Report(sessions.clone(), wg_peers.clone()))?;
+            stream.write(&Response::NodeState(sessions.clone(), wg_peers.clone()))?;
         }
-        Command::ReportSyncStart => {
-            *report_sync = true;
-            stream.write(&Response::ReportSync(true))?;
+        Command::StateSyncStart => {
+            *state_sync = true;
+            stream.write(&Response::StateSync(true))?;
         }
-        Command::ReportSyncStop => {
-            *report_sync = false;
-            stream.write(&Response::ReportSync(false))?;
+        Command::StateSyncStop => {
+            *state_sync = false;
+            stream.write(&Response::StateSync(false))?;
         }
         Command::ServiceEnable(now, service) | Command::ServiceDisable(now, service) => {
             let mode = match command {
@@ -71,4 +74,18 @@ pub fn handle_command(
     };
 
     Ok(())
+}
+
+/// Fetches state and updates `node_state`.
+pub fn update_node_state(node_state: &NodeState) -> () {
+    let sessions = get_sessions();
+    let wg_peers = get_wg_peers();
+
+    {
+        let mut guard = node_state.lock().unwrap();
+        let (ref mut s, ref mut w, ref mut t) = *guard;
+        if *s != sessions || *w != wg_peers {
+            (*s, *w, *t) = (sessions, wg_peers, SystemTime::now());
+        }
+    }
 }
