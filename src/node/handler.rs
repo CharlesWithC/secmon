@@ -1,7 +1,7 @@
 use anyhow::Result;
 use std::net::TcpStream;
 
-use crate::exec::exec;
+use crate::utils::exec;
 use crate::iosered::IOSerialized;
 use crate::models::NodeConfig;
 use crate::models::nodestate::NodeState;

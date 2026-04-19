@@ -6,10 +6,11 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 use crate::iosered::IOSerialized;
-use crate::models::DEFAULT_SOCKET;
+use crate::models::DEFAULT_SOCKET_DIR;
 use crate::models::hub::{ErrHubState, HubState};
 use crate::models::node::Node;
 use crate::models::packet::Response;
+use crate::utils::get_env_var;
 
 mod handler;
 
@@ -51,18 +52,26 @@ fn thread_main(mut stream: TcpStream, hub_state: HubState) -> Result<()> {
 ///
 /// This is a blocking function and does not exit unless interrupted.
 pub fn main(ip: IpAddr, port: u16) -> Result<()> {
-    if fs::exists(DEFAULT_SOCKET).map_err(|e| anyhow!("Unable to access {DEFAULT_SOCKET}: {e}"))? {
-        fs::remove_file(DEFAULT_SOCKET)
-            .map_err(|e| anyhow!("Unable to unlink {DEFAULT_SOCKET}: {e}"))?;
+    let mut socket_path = DEFAULT_SOCKET_DIR.to_owned() + "/secmon.sock";
+    if let Some(dir) = get_env_var::<String>("XDG_RUNTIME_DIR", None) {
+        if !dir.ends_with("/0") {
+            // non-root
+            socket_path = dir + "/secmon.sock";
+        }
     }
 
-    // TODO: listener for command-line control
-    let _listener_ctrl = UnixListener::bind(DEFAULT_SOCKET)
-        .map_err(|e| anyhow!("Unable to bind {DEFAULT_SOCKET}: {e}"))?;
+    if fs::exists(&socket_path).map_err(|e| anyhow!("Unable to access {socket_path}: {e}"))? {
+        fs::remove_file(&socket_path)
+            .map_err(|e| anyhow!("Unable to unlink {socket_path}: {e}"))?;
+    }
 
     let listener =
         TcpListener::bind((ip, port)).map_err(|e| anyhow!("Unable to bind {ip}:{port}: {e}"))?;
-    println!("Hub listening on {ip}:{port}");
+    println!("Listening on {ip}:{port} for nodes");
+
+    let _listener_ctrl = UnixListener::bind(&socket_path)
+        .map_err(|e| anyhow!("Unable to bind {socket_path}: {e}"))?;
+    println!("Listening on {socket_path} for control commands");
 
     // mutex = (counter: u32, nodes: Vec(Node))
     // 'counter' helps find the entry in the vector for the node

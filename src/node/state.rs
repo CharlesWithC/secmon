@@ -1,5 +1,5 @@
 use crate::models::nodestate::{Session, SessionsResult, WgPeer, WgPeersResult};
-use crate::exec::exec;
+use crate::utils::exec;
 
 /// Executes `who -w` and returns parsed result.
 ///
