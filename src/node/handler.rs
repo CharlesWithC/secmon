@@ -1,11 +1,10 @@
 use anyhow::Result;
 use std::net::TcpStream;
-use std::time::SystemTime;
 
 use crate::exec::exec;
 use crate::iosered::IOSerialized;
 use crate::models::NodeConfig;
-use crate::models::node::NodeState;
+use crate::models::nodestate::NodeState;
 use crate::models::packet::{Command, Response};
 use crate::node::state::{get_sessions, get_wg_peers};
 
@@ -22,24 +21,11 @@ pub fn handle_command(
     stream: &mut TcpStream,
     command: &Command,
     node_state: &NodeState,
-    state_sync: &mut bool,
 ) -> Result<()> {
     match command {
-        Command::KeepAlive => {
-            stream.write(&Response::KeepAlive)?;
-        }
         Command::NodeState => {
-            let guard = node_state.lock().unwrap();
-            let (ref sessions, ref wg_peers, _) = *guard;
+            let (sessions, wg_peers) = node_state;
             stream.write(&Response::NodeState(sessions.clone(), wg_peers.clone()))?;
-        }
-        Command::StateSyncStart => {
-            *state_sync = true;
-            stream.write(&Response::StateSync(true))?;
-        }
-        Command::StateSyncStop => {
-            *state_sync = false;
-            stream.write(&Response::StateSync(false))?;
         }
         Command::ServiceEnable(now, service) | Command::ServiceDisable(now, service) => {
             let mode = match command {
@@ -77,8 +63,10 @@ pub fn handle_command(
     Ok(())
 }
 
-/// Fetches state and updates `node_state`.
-pub fn update_node_state(node_config: NodeConfig, node_state: &NodeState) -> () {
+/// Fetches and updates `node_state` in place.
+///
+/// If some update is made, returns `true`; otherwise, `false`.
+pub fn update_node_state(node_config: NodeConfig, node_state: &mut NodeState) -> bool {
     let sessions = if node_config.enable_sessions {
         get_sessions()
     } else {
@@ -91,11 +79,11 @@ pub fn update_node_state(node_config: NodeConfig, node_state: &NodeState) -> () 
         Err("Not monitored".to_owned())
     };
 
-    {
-        let mut guard = node_state.lock().unwrap();
-        let (ref mut s, ref mut w, ref mut t) = *guard;
-        if *s != sessions || *w != wg_peers {
-            (*s, *w, *t) = (sessions, wg_peers, SystemTime::now());
-        }
+    let new_node_state = (sessions, wg_peers);
+    if *node_state != new_node_state {
+        *node_state = new_node_state;
+        true
+    } else {
+        false
     }
 }

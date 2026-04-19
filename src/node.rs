@@ -1,21 +1,22 @@
 use anyhow::Result;
 use gethostname::gethostname;
 use std::net::{IpAddr, TcpStream};
+use std::sync::mpsc::{Receiver, channel};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime};
 
 mod handler;
 mod state;
 use crate::iosered::IOSerialized;
 use crate::models::NodeConfig;
-use crate::models::node::NodeState;
+use crate::models::nodestate::NodeState;
 use crate::models::packet::{Command, Response};
 
 /// The real main function that handles commands and responses.
 ///
 /// This is a blocking function and does not exit unless interrupted.
-fn worker(ip: IpAddr, port: u16, node_state: NodeState) -> Result<()> {
+fn worker(ip: IpAddr, port: u16, node_state_receiver: Receiver<NodeState>) -> Result<()> {
     let mut stream = TcpStream::connect((ip, port))?;
     println!("Connected to hub {ip}:{port}");
 
@@ -30,9 +31,11 @@ fn worker(ip: IpAddr, port: u16, node_state: NodeState) -> Result<()> {
             .unwrap_or(String::new()),
     ))?;
 
-    // initialize variables for state_sync feature
-    let mut state_sync = false;
-    let mut state_sync_last_update = UNIX_EPOCH;
+    // some local states
+    let mut node_state: NodeState = (
+        Err("Initializing".to_owned()),
+        Err("Initializing".to_owned()),
+    );
     let mut last_keepalive = SystemTime::now();
 
     loop {
@@ -47,29 +50,19 @@ fn worker(ip: IpAddr, port: u16, node_state: NodeState) -> Result<()> {
 
         if let Some(command) = command_opt {
             println!("Received {command}");
-            handler::handle_command(&mut stream, &command, &node_state, &mut state_sync)?;
+            handler::handle_command(&mut stream, &command, &node_state)?;
         }
 
-        // hub should deal with state_sync response gracefully,
-        // in case a node state is responded while another command is being sent
-        // i.e. hub should quietly update node state even if it's expecting different response
-        if state_sync {
-            let guard = node_state.lock().unwrap();
-            let (ref sessions, ref wg_peers, ref update_time) = *guard;
-            // only sync if there is an update
-            if *update_time > state_sync_last_update {
-                stream.write(&Response::NodeState(sessions.clone(), wg_peers.clone()))?;
-                state_sync_last_update = *update_time;
-                last_keepalive = SystemTime::now();
-            }
+        if let Ok(new_node_state) = node_state_receiver.recv_timeout(Duration::from_millis(100)) {
+            node_state = new_node_state;
+            let (sessions, wg_peers) = &node_state;
+            stream.write(&Response::NodeState(sessions.clone(), wg_peers.clone()))?;
         }
 
         if SystemTime::now() - Duration::from_secs(60) >= last_keepalive {
             stream.write(&Response::KeepAlive)?;
             last_keepalive = SystemTime::now();
         }
-
-        thread::sleep(Duration::from_secs(1));
     }
 }
 
@@ -82,42 +75,54 @@ pub fn main(ip: IpAddr, port: u16, node_config: NodeConfig) -> Result<()> {
     loop {
         let result = thread::scope(|s| {
             let terminate_flag = Arc::new(Mutex::new(false));
-            let node_state: NodeState = Arc::new(Mutex::new((
-                Err("Initializing".to_owned()),
-                Err("Initializing".to_owned()),
-                UNIX_EPOCH,
-            )));
+            let (node_state_sender, node_state_receiver) = channel::<NodeState>();
 
             {
-                // if worker is down, then kill thread to update state to save resources
+                // thread that keeps track of node state changes
+                // when node state updates, send a message through the channel
+                // if worker is finished, then kill this thread to save resources
                 let terminate_flag = Arc::clone(&terminate_flag);
-                let node_state = Arc::clone(&node_state);
-                s.spawn(move || {
+                s.spawn(move || -> Result<()> {
+                    // local node state tracker, not directly shared with worker
+                    let mut node_state: NodeState = (
+                        Err("Initializing".to_owned()),
+                        Err("Initializing".to_owned()),
+                    );
                     loop {
                         if *terminate_flag.lock().unwrap() {
-                            return;
+                            // need to unwrap inside for (obvious) scoping reasons
+                            return Ok(());
                         }
-                        handler::update_node_state(node_config, &node_state);
+                        let updated = handler::update_node_state(node_config, &mut node_state);
+                        if updated {
+                            node_state_sender.send(node_state.clone())?;
+                        }
                         thread::sleep(Duration::from_secs(1));
                     }
                 });
             }
 
-            let result = worker(ip, port, node_state);
+            // we need to put stream-stuff in a worker
+            // so that when stream closes, the error can be propagated here
+            // which would then update terminate flag for thread clean up
+            let result = worker(ip, port, node_state_receiver);
             *terminate_flag.lock().unwrap() = true;
 
-            if let Err(e) = result { Err(e) } else { Ok(()) }
+            result // directly relay result
         });
 
         if let Err(e) = result {
             if !node_config.reconnect {
+                // if no reconnect, then propagate error
                 return Err(e);
             } else {
+                // otherwise, print error here and reconnect
                 eprintln!("{e}");
             }
         } else {
+            // if no reconnect, then complete and return
             return Ok(());
-        }
+        } // otherwise, reconnect
 
         println!("Reconnecting in 5 seconds...");
         thread::sleep(Duration::from_secs(5));

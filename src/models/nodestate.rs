@@ -4,6 +4,8 @@ use std::fmt;
 
 type ErrorMessage = String;
 
+pub type NodeState = (SessionsResult, WgPeersResult);
+
 #[derive(Serialize, Deserialize, Clone, PartialEq)]
 /// User session collected by node
 pub struct Session {

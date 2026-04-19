@@ -2,7 +2,6 @@ use chrono::DateTime;
 use chrono::offset::Utc;
 use std::fmt;
 use std::net::SocketAddr;
-use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
 use crate::models::nodestate::{SessionsResult, WgPeersResult};
@@ -22,11 +21,8 @@ pub struct Node {
     /// WireGuard peers collected by node
     pub wg_peers: WgPeersResult,
     /// Last state update received from node
-    pub last_state_update: UpdateTime,
+    pub last_state_update: SystemTime,
 }
-
-pub type NodeState = Arc<Mutex<(SessionsResult, WgPeersResult, UpdateTime)>>;
-pub type UpdateTime = SystemTime;
 
 impl fmt::Display for Node {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

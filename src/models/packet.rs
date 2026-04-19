@@ -6,17 +6,8 @@ use crate::models::nodestate::{SessionsResult, WgPeersResult};
 #[derive(Serialize, Deserialize)]
 /// Reprents a Command sent from hub to node.
 pub enum Command {
-    /// Request a `KeepAlive` response from node
-    KeepAlive,
-
     /// Request current node state
     NodeState,
-
-    /// Request node to sync state updates until stopped
-    StateSyncStart,
-
-    /// Request node to stop syncing state updates
-    StateSyncStop,
 
     /// Enable a systemctl service
     ServiceEnable(FlagNow, ServiceName),
@@ -38,10 +29,7 @@ pub type Minutes = u32;
 impl fmt::Display for Command {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Command::KeepAlive => write!(f, "Command::KeepAlive"),
             Command::NodeState => write!(f, "Command::NodeState"),
-            Command::StateSyncStart => write!(f, "Command::StateSyncStart"),
-            Command::StateSyncStop => write!(f, "Command::StateSyncStop"),
             Command::ServiceEnable(now, service) => {
                 write!(
                     f,
@@ -78,17 +66,11 @@ pub enum Response {
     /// Node state of Session and WgPeer
     NodeState(SessionsResult, WgPeersResult),
 
-    /// Node state sync status
-    ///
-    /// This response in response to `StateSyncStart` and `StateSyncStop` commands
-    StateSync(Enabled),
-
     /// Generic result of a command
     Result(Success, Message),
 }
 
 pub type Hostname = String;
-pub type Enabled = bool;
 pub type Success = bool;
 pub type Message = String;
 
@@ -103,7 +85,6 @@ impl fmt::Display for Response {
                 sessions.as_ref().map(|v| v.len() as isize).unwrap_or(-1),
                 wg_peers.as_ref().map(|v| v.len() as isize).unwrap_or(-1),
             ),
-            Response::StateSync(enabled) => write!(f, "Response::StateSync(enabled={enabled})"),
             Response::Result(success, message) => write!(
                 f,
                 "Response::Result(success={success}, message=\"{message}\")"

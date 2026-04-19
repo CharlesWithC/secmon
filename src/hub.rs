@@ -9,7 +9,7 @@ use crate::iosered::IOSerialized;
 use crate::models::DEFAULT_SOCKET;
 use crate::models::hub::{ErrHubState, HubState};
 use crate::models::node::Node;
-use crate::models::packet::{Command, Response};
+use crate::models::packet::Response;
 
 mod handler;
 
@@ -30,10 +30,6 @@ fn thread_main(mut stream: TcpStream, hub_state: HubState) -> Result<()> {
             "Invalid initial response: Should be Response::Connect"
         ));
     }
-
-    let command = Command::StateSyncStart;
-    println!("Sending {command} to {address} ({hostname})");
-    stream.write(&command)?;
 
     loop {
         let response = stream.read::<Response>()?;
@@ -59,7 +55,7 @@ pub fn main(ip: IpAddr, port: u16) -> Result<()> {
         fs::remove_file(DEFAULT_SOCKET)
             .map_err(|e| anyhow!("Unable to unlink {DEFAULT_SOCKET}: {e}"))?;
     }
-    
+
     // TODO: listener for command-line control
     let _listener_ctrl = UnixListener::bind(DEFAULT_SOCKET)
         .map_err(|e| anyhow!("Unable to bind {DEFAULT_SOCKET}: {e}"))?;
