@@ -91,8 +91,8 @@ fn main() {
         }
     };
 
-    if let Err(err) = launch(ip, port, mode) {
-        eprintln!("Error: {}", err);
+    if let Err(e) = launch(ip, port, mode) {
+        eprintln!("{e}");
         process::exit(1);
     } else {
         process::exit(0);

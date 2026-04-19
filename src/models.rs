@@ -11,6 +11,8 @@ pub mod packet;
 pub const DEFAULT_HOST: IpAddr = IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0));
 /// Default port for hub and node.
 pub const DEFAULT_PORT: u16 = 9992;
+/// Default socket to bind to for control.
+pub const DEFAULT_SOCKET: &str = "/var/run/secmon/secmon.sock";
 
 /// Launch mode
 pub enum Mode {

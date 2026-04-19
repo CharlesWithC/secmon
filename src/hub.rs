@@ -1,9 +1,12 @@
-use anyhow::Result;
+use anyhow::{Result, anyhow};
+use std::fs;
 use std::net::{IpAddr, TcpListener, TcpStream};
+use std::os::unix::net::UnixListener;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
 use crate::iosered::IOSerialized;
+use crate::models::DEFAULT_SOCKET;
 use crate::models::hub::{ErrHubState, HubState};
 use crate::models::node::Node;
 use crate::models::packet::{Command, Response};
@@ -52,7 +55,17 @@ fn thread_main(mut stream: TcpStream, hub_state: HubState) -> Result<()> {
 ///
 /// This is a blocking function and does not exit unless interrupted.
 pub fn main(ip: IpAddr, port: u16) -> Result<()> {
-    let listener = TcpListener::bind((ip, port))?;
+    if fs::exists(DEFAULT_SOCKET).map_err(|e| anyhow!("Unable to access {DEFAULT_SOCKET}: {e}"))? {
+        fs::remove_file(DEFAULT_SOCKET)
+            .map_err(|e| anyhow!("Unable to unlink {DEFAULT_SOCKET}: {e}"))?;
+    }
+    
+    // TODO: listener for command-line control
+    let _listener_ctrl = UnixListener::bind(DEFAULT_SOCKET)
+        .map_err(|e| anyhow!("Unable to bind {DEFAULT_SOCKET}: {e}"))?;
+
+    let listener =
+        TcpListener::bind((ip, port)).map_err(|e| anyhow!("Unable to bind {ip}:{port}: {e}"))?;
     println!("Hub listening on {ip}:{port}");
 
     // mutex = (counter: u32, nodes: Vec(Node))
@@ -66,12 +79,12 @@ pub fn main(ip: IpAddr, port: u16) -> Result<()> {
 
                 thread::spawn(move || {
                     if let Err(e) = thread_main(stream, hub_state) {
-                        eprintln!("Connection error: {}", e);
+                        eprintln!("{e}");
                     }
                 });
             }
             Err(e) => {
-                eprintln!("TcpStream error: {}", e);
+                eprintln!("{e}");
             }
         };
     }

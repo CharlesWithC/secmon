@@ -106,16 +106,14 @@ pub fn main(ip: IpAddr, port: u16, node_config: NodeConfig) -> Result<()> {
             let result = worker(ip, port, node_state);
             *terminate_flag.lock().unwrap() = true;
 
-            if let Err(err) = result {
-                Err(err)
-            } else {
-                Ok(())
-            }
+            if let Err(e) = result { Err(e) } else { Ok(()) }
         });
 
-        if let Err(err) = result {
+        if let Err(e) = result {
             if !node_config.reconnect {
-                return Err(err);
+                return Err(e);
+            } else {
+                eprintln!("{e}");
             }
         } else {
             return Ok(());

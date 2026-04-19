@@ -13,7 +13,7 @@ where
     let output = Command::new(&program)
         .args(args)
         .output()
-        .map_err(|e| format!("Failed to execute '{program}': {}", e))?;
+        .map_err(|e| format!("Failed to execute '{program}': {e}"))?;
 
     if !output.status.success() {
         return Err(format!(
@@ -25,7 +25,7 @@ where
     }
 
     let parsed_output =
-        str::from_utf8(&output.stdout).map_err(|e| format!("Unable to parse stdout: {}", e))?;
+        str::from_utf8(&output.stdout).map_err(|e| format!("Unable to parse stdout: {e}"))?;
 
     Ok(parsed_output.to_owned())
 }
