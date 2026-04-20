@@ -1,5 +1,6 @@
 use chrono::DateTime;
 use chrono::offset::Utc;
+use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::net::SocketAddr;
 use std::time::SystemTime;
@@ -7,6 +8,7 @@ use std::time::SystemTime;
 use crate::models::nodestate::{SessionsResult, WgPeersResult};
 
 /// Instance of a node
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Node {
     /// Serial number of node
     ///

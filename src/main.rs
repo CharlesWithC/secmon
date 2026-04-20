@@ -1,19 +1,22 @@
-use anyhow::Result;
-use std::net::IpAddr;
+use anyhow::{Result, anyhow};
+use std::fs;
 use std::{env, process};
 
+mod cli;
 mod hub;
 mod iosered;
 mod models;
 mod node;
 mod utils;
-use crate::models::{DEFAULT_HOST, DEFAULT_PORT, Mode, NodeConfig};
-use crate::utils::get_env_var_strict;
+use crate::models::DEFAULT_SOCKET_DIR;
+use crate::models::{DEFAULT_HOST, DEFAULT_PORT, LaunchArgs, NodeConfig};
+use crate::utils::{get_env_var, get_env_var_strict};
 
 const USAGE: &str = "Usage:
   secmon hub                    launch hub server
   secmon node [who] [wg]        launch node server
     [--reconnect]               reconnect if connection lost
+  secmon help                   print this help message
 
 Hub control commands:
   secmon list                   list all connected nodes
@@ -22,14 +25,46 @@ Environment:
   HOST=<host> PORT=<port> secmon hub
   HUB_IP=<ip> HUB_PORT=<port> secmon node";
 
-fn launch(ip: IpAddr, port: u16, mode: Mode) -> Result<()> {
-    match &mode {
-        &Mode::Hub => {
-            crate::hub::main(ip, port)?;
+fn get_socket_path() -> String {
+    let mut socket_path = DEFAULT_SOCKET_DIR.to_owned() + "/secmon.sock";
+    if let Some(dir) = get_env_var::<String>("XDG_RUNTIME_DIR", None) {
+        if !dir.ends_with("/0") {
+            // non-root
+            socket_path = dir + "/secmon.sock";
         }
-        &Mode::Node(node_config) => loop {
+    }
+
+    socket_path
+}
+
+fn launch(launch_args: LaunchArgs) -> Result<()> {
+    match launch_args {
+        LaunchArgs::Hub(ip, port) => {
+            let socket_path = get_socket_path();
+            if fs::exists(&socket_path)
+                .map_err(|e| anyhow!("Unable to access {socket_path}: {e}"))?
+            {
+                fs::remove_file(&socket_path)
+                    .map_err(|e| anyhow!("Unable to unlink {socket_path}: {e}"))?;
+            }
+
+            crate::hub::main(ip, port, socket_path)?;
+        }
+        LaunchArgs::Node(ip, port, node_config) => {
             crate::node::main(ip, port, node_config)?;
-        },
+        }
+        LaunchArgs::Cli(command, args) => {
+            let socket_path = get_socket_path();
+            if !fs::exists(&socket_path)
+                .map_err(|e| anyhow!("Unable to access {socket_path}: {e}"))?
+            {
+                return Err(anyhow!(
+                    "{socket_path} does not exist, is hub daemon running?"
+                ));
+            }
+
+            crate::cli::main(socket_path, command, args)?;
+        }
     }
 
     Ok(())
@@ -43,35 +78,42 @@ fn main() {
         process::exit(1);
     }
 
-    let ip: IpAddr;
-    let port: u16;
-    let mode = match args.get(1).unwrap().as_str() {
+    let launch_args = match args.get(1).unwrap().as_str() {
         "hub" => {
-            ip = get_env_var_strict("HOST", Some(DEFAULT_HOST));
-            port = get_env_var_strict("PORT", Some(DEFAULT_PORT));
-            Mode::Hub
+            let ip = get_env_var_strict("HOST", Some(DEFAULT_HOST));
+            let port = get_env_var_strict("PORT", Some(DEFAULT_PORT));
+            LaunchArgs::Hub(ip, port)
         }
         "node" => {
-            ip = get_env_var_strict("HUB_IP", None);
-            port = get_env_var_strict("HUB_PORT", Some(DEFAULT_PORT));
+            let ip = get_env_var_strict("HUB_IP", None);
+            let port = get_env_var_strict("HUB_PORT", Some(DEFAULT_PORT));
 
             let reconnect = args.contains(&"--reconnect".to_owned());
             let enable_sessions = args.contains(&"who".to_owned());
             let enable_wg_peers = args.contains(&"wg".to_owned());
 
-            Mode::Node(NodeConfig {
-                reconnect,
-                enable_sessions,
-                enable_wg_peers,
-            })
+            LaunchArgs::Node(
+                ip,
+                port,
+                NodeConfig {
+                    reconnect,
+                    enable_sessions,
+                    enable_wg_peers,
+                },
+            )
+        }
+        command @ "list" => LaunchArgs::Cli(command.to_owned(), args[2..].to_vec()),
+        "help" => {
+            eprintln!("{USAGE}");
+            process::exit(0);
         }
         _ => {
-            eprintln!("Invalid mode; Must be either 'hub' or 'node'");
+            eprintln!("{USAGE}");
             process::exit(1);
         }
     };
 
-    if let Err(e) = launch(ip, port, mode) {
+    if let Err(e) = launch(launch_args) {
         eprintln!("{e}");
         process::exit(1);
     } else {
