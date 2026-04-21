@@ -1,12 +1,12 @@
 use anyhow::Result;
 use std::net::TcpStream;
 
-use crate::utils::exec;
 use crate::iosered::IOSerialized;
 use crate::models::NodeConfig;
 use crate::models::nodestate::NodeState;
 use crate::models::packet::{Command, Response};
 use crate::node::state::{get_sessions, get_wg_peers};
+use crate::utils::exec;
 
 /// Returns `Response::Result` constructed from `Result`.
 fn response_result(result: Result<String, String>) -> Response {

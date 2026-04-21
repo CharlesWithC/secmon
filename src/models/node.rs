@@ -32,7 +32,7 @@ pub struct Node {
 
 impl fmt::Display for Node {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let last_update_datetime: DateTime<Utc> = self.last_state_update.into();
+        let last_update_dt: DateTime<Utc> = self.last_state_update.into();
         write!(
             f,
             "Node(serial={}, hostname=\"{}\", address=\"{}\", sessions[{}], wg_peers[{}], last_update=\"{}\")",
@@ -47,7 +47,7 @@ impl fmt::Display for Node {
                 .as_ref()
                 .map(|v| v.len() as isize)
                 .unwrap_or(-1),
-            last_update_datetime.format("%F %T")
+            last_update_dt.format("%F %T")
         )
     }
 }

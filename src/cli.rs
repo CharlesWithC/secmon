@@ -72,11 +72,10 @@ pub fn main(socket_path: String, command: String, _args: Vec<String>) -> Result<
                                     println!("  {}: {}", "endpoint".bold(), endpoint);
                                 }
                                 if let Some(latest_handshake) = &wg_peer.latest_handshake {
-                                    println!(
-                                        "  {}: {}",
-                                        "latest handshake".bold(),
-                                        latest_handshake
-                                    );
+                                    let dt: DateTime<Local> = (*latest_handshake).into();
+                                    let parsed = format!("{}", dt.format("%F %T"));
+
+                                    println!("  {}: {}", "latest handshake".bold(), parsed);
                                 }
                             }),
                             Err(e) => {

@@ -1,6 +1,9 @@
 use anyhow::Result;
+use chrono::DateTime;
+use chrono::offset::Utc;
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::time::SystemTime;
 
 type ErrorMessage = String;
 
@@ -42,7 +45,7 @@ pub struct WgPeer {
     /// WireGuard peer endpoint (connecting IP/port)
     pub endpoint: Option<String>,
     /// WireGuard peer last handshake (last connection time)
-    pub latest_handshake: Option<String>,
+    pub latest_handshake: Option<SystemTime>,
 }
 
 pub type WgPeers = Vec<WgPeer>;
@@ -50,13 +53,19 @@ pub type WgPeersResult = Result<WgPeers, ErrorMessage>;
 
 impl fmt::Display for WgPeer {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut latest_handshake_parsed = String::from("N/A");
+        if let Some(st) = self.latest_handshake {
+            let dt: DateTime<Utc> = st.into();
+            latest_handshake_parsed = format!("{}", dt.format("%F %T"));
+        }
+
         write!(
             f,
             "WgPeer(interface=\"{}\", peer=\"{}\", endpoint=\"{}\", latest_handshake=\"{}\")",
             self.interface,
             self.peer,
             self.endpoint.as_deref().unwrap_or("N/A"),
-            self.latest_handshake.as_deref().unwrap_or("N/A")
+            latest_handshake_parsed
         )
     }
 }

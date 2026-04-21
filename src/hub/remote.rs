@@ -135,9 +135,7 @@ pub fn main(listener: TcpListener, hub_state: HubStateMutex) -> () {
                     let (_, ref mut nodes) = *guard;
                     if let Some(index) = nodes.iter().position(|node| node.address == address) {
                         nodes.remove(index);
-                    } else {
-                        eprintln!("Cannot find node to be removed; This should not happen");
-                    }
+                    } // note: `ASSUME_HOSTNAME_UNIQUE` can lead to early removal
                 });
             }
             Err(e) => {

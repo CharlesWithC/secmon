@@ -1,3 +1,5 @@
+use std::time::{Duration, UNIX_EPOCH};
+
 use crate::models::nodestate::{Session, SessionsResult, WgPeer, WgPeersResult};
 use crate::utils::exec;
 
@@ -38,61 +40,52 @@ pub fn get_sessions() -> SessionsResult {
     Ok(sessions)
 }
 
-/// Executes `wg` and returns parsed result.
+/// Executes `wg` twice and returns parsed result.
 ///
 /// If an error occurs, returns a string-based error.
 pub fn get_wg_peers() -> WgPeersResult {
-    let output = exec("wg", [])?;
+    // `wg show` only supports one attribute in each run
+    // the output format is (interface, peer, <attribute>)
+    // thus, we run `wg show` twice with different arguments
 
     let mut wg_peers = Vec::<WgPeer>::new();
 
-    let mut interface = "N/A";
-    let mut lines = output.lines();
-    while let Some(line) = lines.next() {
-        let line_split = line.split_whitespace().collect::<Vec<_>>();
-        match line_split.as_slice() {
-            // handles interface
-            ["interface:", interface_ref, ..] => {
-                interface = *interface_ref;
-
-                while let Some(line) = lines.next() {
-                    let line_split = line.split_whitespace().collect::<Vec<_>>();
-                    match line_split.as_slice() {
-                        [] => break,   // empty line, interface block finished
-                        _ => continue, // entry that we don't care
-                    }
-                }
-            }
-            // handles peer
-            ["peer:", peer_ref, ..] => {
-                let peer = (*peer_ref).to_owned();
-                let mut endpoint = None;
-                let mut latest_handshake = None;
-
-                while let Some(line) = lines.next() {
-                    let line_split = line.split_whitespace().collect::<Vec<_>>();
-                    match line_split.as_slice() {
-                        ["endpoint:", endpoint_ref, ..] => {
-                            endpoint = Some((*endpoint_ref).to_owned());
-                        }
-                        ["latest", "handshake:", latest_handshake_ref @ ..] => {
-                            latest_handshake = Some(latest_handshake_ref.join(" "));
-                        }
-                        [] => break,   // empty line, peer block finished
-                        _ => continue, // entry that we don't care
-                    }
-                }
-
-                wg_peers.push(WgPeer {
-                    interface: interface.to_owned(),
-                    peer,
-                    endpoint,
-                    latest_handshake,
-                });
-            }
-            // don't care other sections
-            _ => continue,
+    let output_endpoints = exec("wg", ["show", "all", "endpoints"])?;
+    for line in output_endpoints.lines() {
+        let parts = line.split_whitespace().collect::<Vec<_>>();
+        if parts.len() < 3 {
+            return Err(format!("command 'wg' did not produce a valid output"));
         }
+
+        wg_peers.push(WgPeer {
+            interface: parts[0].to_owned(),
+            peer: parts[1].to_owned(),
+            endpoint: if parts[2] != "(none)" {
+                Some(parts[2].to_owned())
+            } else {
+                None
+            },
+            latest_handshake: None,
+        })
+    }
+
+    let output_handshake = exec("wg", ["show", "all", "latest-handshakes"])?;
+    for line in output_handshake.lines() {
+        let parts = line.split_whitespace().collect::<Vec<_>>();
+        if parts.len() < 3 {
+            return Err(format!("command 'wg' did not produce a valid output"));
+        }
+
+        wg_peers.iter_mut().for_each(|wg_peer| {
+            if wg_peer.peer.as_str() == parts[1] {
+                let timestamp_res = parts[2].parse::<u64>();
+                if let Ok(timestamp) = timestamp_res
+                    && timestamp != 0
+                {
+                    wg_peer.latest_handshake = Some(UNIX_EPOCH + Duration::from_secs(timestamp));
+                }
+            }
+        })
     }
 
     Ok(wg_peers)
