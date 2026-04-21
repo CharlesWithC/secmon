@@ -55,7 +55,10 @@ pub fn main(socket_path: String, command: String, _args: Vec<String>) -> Result<
                                 if let Some(from) = &session.from {
                                     println!("  {}: {}", "from".bold(), from);
                                 }
-                                println!("  {}: {}", "login".bold(), session.login);
+
+                                let dt: DateTime<Local> = session.login.into();
+                                let parsed: String = format!("{}", dt.format("%F %T"));
+                                println!("  {}: {}", "login".bold(), parsed);
                             }),
                             Err(e) => {
                                 println!("");

@@ -47,7 +47,7 @@ impl fmt::Display for Node {
                 .as_ref()
                 .map(|v| v.len() as isize)
                 .unwrap_or(-1),
-            last_update_dt.format("%F %T")
+            last_update_dt
         )
     }
 }

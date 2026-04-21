@@ -19,7 +19,7 @@ pub enum Command {
     Reboot(Minutes),
 
     /// Cancel node server reboot schedule
-    RebootCancel,
+    ShutdownCancel,
 }
 
 pub type FlagNow = bool;
@@ -45,7 +45,7 @@ impl fmt::Display for Command {
             Command::Reboot(minutes) => {
                 write!(f, "Command::Reboot(in=\"{}min\")", minutes)
             }
-            Command::RebootCancel => {
+            Command::ShutdownCancel => {
                 write!(f, "Command::RebootCancel")
             }
         }

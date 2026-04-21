@@ -1,13 +1,21 @@
-use std::time::{Duration, UNIX_EPOCH};
+use chrono::{Local, NaiveDateTime};
+use std::process::Command;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::models::nodestate::{Session, SessionsResult, WgPeer, WgPeersResult};
-use crate::utils::exec;
+use crate::utils::parse_command_output;
 
 /// Executes `who -w` and returns parsed result.
 ///
 /// If an error occurs, returns a string-based error.
 pub fn get_sessions() -> SessionsResult {
-    let output = exec("who", ["-w"])?;
+    let output = parse_command_output(
+        "who",
+        Command::new("who")
+            .args(["-w"])
+            .env("LC_ALL", "C.UTF-8") // ensure consistent time format
+            .output(),
+    )?;
 
     let mut sessions = Vec::<Session>::new();
 
@@ -31,8 +39,13 @@ pub fn get_sessions() -> SessionsResult {
             roffset += 1;
         }
 
-        // TIME (YYYY-MM-DD HH:MM)
-        let login = format!("{} {}", parts[len - roffset - 1], parts[len - roffset]);
+        // TIME (C.UTF-8 / YYYY-MM-DD HH:MM)
+        let login_str = format!("{} {}", parts[len - roffset - 1], parts[len - roffset]);
+        let login_dt = NaiveDateTime::parse_from_str(login_str.as_str(), "%Y-%m-%d %H:%M")
+            .map_err(|e| format!("unable to parse login time: {e}"))?
+            .and_local_timezone(Local)
+            .unwrap();
+        let login: SystemTime = login_dt.into();
 
         sessions.push(Session { user, from, login });
     }
@@ -50,7 +63,12 @@ pub fn get_wg_peers() -> WgPeersResult {
 
     let mut wg_peers = Vec::<WgPeer>::new();
 
-    let output_endpoints = exec("wg", ["show", "all", "endpoints"])?;
+    let output_endpoints = parse_command_output(
+        "wg",
+        Command::new("wg")
+            .args(["show", "all", "endpoints"])
+            .output(),
+    )?;
     for line in output_endpoints.lines() {
         let parts = line.split_whitespace().collect::<Vec<_>>();
         if parts.len() < 3 {
@@ -68,8 +86,12 @@ pub fn get_wg_peers() -> WgPeersResult {
             latest_handshake: None,
         })
     }
-
-    let output_handshake = exec("wg", ["show", "all", "latest-handshakes"])?;
+    let output_handshake = parse_command_output(
+        "wg",
+        Command::new("wg")
+            .args(["show", "all", "latest-handshakes"])
+            .output(),
+    )?;
     for line in output_handshake.lines() {
         let parts = line.split_whitespace().collect::<Vec<_>>();
         if parts.len() < 3 {

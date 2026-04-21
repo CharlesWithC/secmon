@@ -17,7 +17,7 @@ pub struct Session {
     /// Remote origin of session (may be `None` for local session)
     pub from: Option<String>,
     /// Login time of session
-    pub login: String,
+    pub login: SystemTime,
 }
 
 pub type Sessions = Vec<Session>;
@@ -25,12 +25,15 @@ pub type SessionsResult = Result<Sessions, ErrorMessage>;
 
 impl fmt::Display for Session {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let dt: DateTime<Utc> = self.login.into();
+        let login_parsed = format!("{}", dt);
+
         write!(
             f,
             "Session(user=\"{}\", from=\"{}\", login=\"{}\")",
             self.user,
             self.from.as_deref().unwrap_or("N/A"),
-            self.login
+            login_parsed
         )
     }
 }
@@ -56,7 +59,7 @@ impl fmt::Display for WgPeer {
         let mut latest_handshake_parsed = String::from("N/A");
         if let Some(st) = self.latest_handshake {
             let dt: DateTime<Utc> = st.into();
-            latest_handshake_parsed = format!("{}", dt.format("%F %T"));
+            latest_handshake_parsed = format!("{}", dt);
         }
 
         write!(

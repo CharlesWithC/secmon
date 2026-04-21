@@ -1,12 +1,13 @@
 use anyhow::Result;
 use std::net::TcpStream;
+use std::process;
 
 use crate::iosered::IOSerialized;
 use crate::models::NodeConfig;
 use crate::models::nodestate::NodeState;
 use crate::models::packet::{Command, Response};
 use crate::node::state::{get_sessions, get_wg_peers};
-use crate::utils::exec;
+use crate::utils::parse_command_output;
 
 /// Returns `Response::Result` constructed from `Result`.
 fn response_result(result: Result<String, String>) -> Response {
@@ -40,7 +41,10 @@ pub fn handle_command(
                 .chain(Some(service.as_str()))
                 .collect();
 
-            let result = exec("systemctl", args);
+            let result = parse_command_output(
+                "systemctl",
+                process::Command::new("systemctl").args(args).output(),
+            );
             stream.write(&response_result(result))?;
         }
         Command::Reboot(minutes) => {
@@ -51,11 +55,17 @@ pub fn handle_command(
                 .chain(Some(minutes_arg.as_str()))
                 .collect();
 
-            let result = exec("shutdown", args);
+            let result = parse_command_output(
+                "shutdown",
+                process::Command::new("shutdown").args(args).output(),
+            );
             stream.write(&response_result(result))?;
         }
-        Command::RebootCancel => {
-            let result = exec("shutdown", ["-c"]);
+        Command::ShutdownCancel => {
+            let result = parse_command_output(
+                "shutdown",
+                process::Command::new("shutdown").args(["-c"]).output(),
+            );
             stream.write(&response_result(result))?;
         }
     };
