@@ -4,7 +4,8 @@ use std::sync::{Arc, Mutex};
 
 use crate::models::node::Node;
 
-pub type HubState = Arc<Mutex<(u32, Vec<Node>)>>;
+pub type HubState = (u32, Vec<Node>);
+pub type HubStateMutex = Arc<Mutex<HubState>>;
 
 /// Error when updating hub state
 pub enum ErrHubState {

@@ -24,6 +24,10 @@ pub struct Node {
     pub wg_peers: WgPeersResult,
     /// Last state update received from node
     pub last_state_update: SystemTime,
+    /// Whether node is connected
+    ///
+    /// Note: When a node disconnects, there is a grace period of 30 seconds before it is removed.
+    pub connected: bool,
 }
 
 impl fmt::Display for Node {

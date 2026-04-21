@@ -70,13 +70,13 @@ pub fn update_node_state(node_config: NodeConfig, node_state: &mut NodeState) ->
     let sessions = if node_config.enable_sessions {
         get_sessions()
     } else {
-        Err("Not monitored".to_owned())
+        Err("not monitored".to_owned())
     };
 
     let wg_peers = if node_config.enable_wg_peers {
         get_wg_peers()
     } else {
-        Err("Not monitored".to_owned())
+        Err("not monitored".to_owned())
     };
 
     let new_node_state = (sessions, wg_peers);

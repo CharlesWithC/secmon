@@ -14,6 +14,9 @@ pub const DEFAULT_PORT: u16 = 9992;
 /// Default socket directory for hub <=> cli
 pub const DEFAULT_SOCKET_DIR: &str = "/var/run/secmon";
 
+/// Grace period in seconds before removing a disconnected node
+pub const DEFAULT_GRACE_PERIOD: u64 = 30;
+
 /// Launch arguments
 pub enum LaunchArgs {
     Hub(IpAddr, u16),

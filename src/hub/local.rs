@@ -4,12 +4,12 @@ use std::sync::Arc;
 use std::thread;
 
 use crate::iosered::IOSerialized;
-use crate::models::hub::{CtrlCmd, CtrlRes, HubState};
+use crate::models::hub::{CtrlCmd, CtrlRes, HubStateMutex};
 
 /// Handles local cli command.
 ///
 /// Returns the result of executing the command.
-fn handle_command(command: CtrlCmd, hub_state: &HubState) -> CtrlRes {
+fn handle_command(command: CtrlCmd, hub_state: &HubStateMutex) -> CtrlRes {
     match command {
         CtrlCmd::List => {
             let guard = hub_state.lock().unwrap();
@@ -22,7 +22,7 @@ fn handle_command(command: CtrlCmd, hub_state: &HubState) -> CtrlRes {
 /// Main thread function for local cli connection.
 ///
 /// This is a blocking function and does not exit unless interrupted.
-fn thread_main(mut stream: UnixStream, hub_state: HubState) -> Result<()> {
+fn thread_main(mut stream: UnixStream, hub_state: HubStateMutex) -> Result<()> {
     loop {
         let command = stream.read::<CtrlCmd>()?;
         println!("Received {command}");
@@ -42,11 +42,11 @@ fn thread_main(mut stream: UnixStream, hub_state: HubState) -> Result<()> {
 /// Main function for handling incoming local cli connections.
 ///
 /// This is a blocking function and does not exit unless interrupted.
-pub fn main(listener: UnixListener, hub_state: HubState) -> () {
+pub fn main(listener: UnixListener, hub_state: HubStateMutex) -> () {
     for stream in listener.incoming() {
         match stream {
             Ok(stream) => {
-                let hub_state: HubState = Arc::clone(&hub_state);
+                let hub_state: HubStateMutex = Arc::clone(&hub_state);
 
                 thread::spawn(move || {
                     if let Err(e) = thread_main(stream, hub_state) {

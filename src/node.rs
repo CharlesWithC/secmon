@@ -85,8 +85,8 @@ pub fn main(ip: IpAddr, port: u16, node_config: NodeConfig) -> Result<()> {
                 s.spawn(move || -> Result<()> {
                     // local node state tracker, not directly shared with worker
                     let mut node_state: NodeState = (
-                        Err("Initializing".to_owned()),
-                        Err("Initializing".to_owned()),
+                        Err("initializing".to_owned()),
+                        Err("initializing".to_owned()),
                     );
                     loop {
                         if *terminate_flag.lock().unwrap() {

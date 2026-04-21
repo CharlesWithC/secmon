@@ -12,7 +12,7 @@ pub fn get_sessions() -> SessionsResult {
     for line in output.lines() {
         let parts = line.split_whitespace().collect::<Vec<_>>();
         if parts.len() < 3 {
-            return Err(format!("Command 'who' did not produce a valid output"));
+            return Err(format!("command 'who' did not produce a valid output"));
         }
 
         let len = parts.len();

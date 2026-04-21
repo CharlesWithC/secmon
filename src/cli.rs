@@ -25,41 +25,53 @@ pub fn main(socket_path: String, command: String, _args: Vec<String>) -> Result<
             let result = stream.read::<CtrlRes>()?;
             match result {
                 CtrlRes::List(nodes) => {
-                    nodes.into_iter().for_each(|node| {
-                        let last_state_update_dt: DateTime<Local> = node.last_state_update.into();
+                    for (i, node) in nodes.iter().enumerate() {
+                        if i != 0 {
+                            println!("");
+                        }
 
                         println!("{}: {}", "node".green().bold(), node.hostname.green());
                         println!("  {}: {}", "address".bold(), node.address);
+                        let last_state_update_dt: DateTime<Local> = node.last_state_update.into();
                         println!(
                             "  {}: {}",
                             "last state update".bold(),
                             last_state_update_dt.format("%F %T")
                         );
+                        println!(
+                            "  {}? {}",
+                            "connected".bold(),
+                            if node.connected {
+                                "yes".green()
+                            } else {
+                                "no".red()
+                            }
+                        );
 
-                        match node.sessions {
+                        match &node.sessions {
                             Ok(sessions) => sessions.into_iter().for_each(|session| {
                                 println!("");
                                 println!("{}: {}", "session".yellow().bold(), session.user);
-                                if let Some(from) = session.from {
+                                if let Some(from) = &session.from {
                                     println!("  {}: {}", "from".bold(), from);
                                 }
                                 println!("  {}: {}", "login".bold(), session.login);
                             }),
                             Err(e) => {
                                 println!("");
-                                println!("{}: {}", "sessions".yellow(), e);
+                                println!("{}: {}", "sessions".yellow().bold(), e);
                             }
                         }
 
-                        match node.wg_peers {
+                        match &node.wg_peers {
                             Ok(wg_peers) => wg_peers.into_iter().for_each(|wg_peer| {
                                 println!("");
                                 println!("{}: {}", "wg peer".yellow().bold(), wg_peer.peer);
                                 println!("  {}: {}", "interface".bold(), wg_peer.interface);
-                                if let Some(endpoint) = wg_peer.endpoint {
+                                if let Some(endpoint) = &wg_peer.endpoint {
                                     println!("  {}: {}", "endpoint".bold(), endpoint);
                                 }
-                                if let Some(latest_handshake) = wg_peer.latest_handshake {
+                                if let Some(latest_handshake) = &wg_peer.latest_handshake {
                                     println!(
                                         "  {}: {}",
                                         "latest handshake".bold(),
@@ -69,10 +81,10 @@ pub fn main(socket_path: String, command: String, _args: Vec<String>) -> Result<
                             }),
                             Err(e) => {
                                 println!("");
-                                println!("{}: {}", "wg peers".yellow(), e);
+                                println!("{}: {}", "wg peers".yellow().bold(), e);
                             }
                         }
-                    });
+                    }
                     Ok(())
                 } // _ => Err(anyhow!("Received invalid response from hub: {result}")),
             }
