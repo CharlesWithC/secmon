@@ -6,10 +6,10 @@ use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::iosered::IOSerialized;
-use crate::models::DEFAULT_GRACE_PERIOD;
 use crate::models::hub::{ErrHubState, HubStateMutex};
 use crate::models::node::Node;
 use crate::models::packet::Response;
+use crate::models::{ASSUME_HOSTNAME_UNIQUE, DISCONNECT_GRACE_PERIOD};
 
 /// Initializes node connection.
 ///
@@ -17,6 +17,13 @@ use crate::models::packet::Response;
 fn handle_new_node(address: &SocketAddr, hostname: &String, hub_state: &HubStateMutex) -> u32 {
     let mut guard = hub_state.lock().unwrap();
     let (ref mut counter, ref mut nodes) = *guard;
+
+    // optionally remove possibly disconnected node of same hostname
+    if ASSUME_HOSTNAME_UNIQUE {
+        if let Some(index) = nodes.iter().position(|node| node.hostname == *hostname) {
+            nodes.remove(index);
+        }
+    }
 
     // increment counter for nodes
     *counter += 1;
@@ -122,7 +129,7 @@ pub fn main(listener: TcpListener, hub_state: HubStateMutex) -> () {
                     });
                     drop(guard); // explicitly drop guard to unlock mutex
 
-                    thread::sleep(Duration::from_secs(DEFAULT_GRACE_PERIOD));
+                    thread::sleep(Duration::from_secs(DISCONNECT_GRACE_PERIOD));
 
                     let mut guard = hub_state.lock().unwrap();
                     let (_, ref mut nodes) = *guard;

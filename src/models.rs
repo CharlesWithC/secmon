@@ -15,7 +15,13 @@ pub const DEFAULT_PORT: u16 = 9992;
 pub const DEFAULT_SOCKET_DIR: &str = "/var/run/secmon";
 
 /// Grace period in seconds before removing a disconnected node
-pub const DEFAULT_GRACE_PERIOD: u64 = 30;
+pub const DISCONNECT_GRACE_PERIOD: u64 = 30;
+/// Whether to assume hostnames would be unique
+///
+/// If `true`, then
+///
+///   - on node reconnect, node of same hostname would immediately replace disconnected node
+pub const ASSUME_HOSTNAME_UNIQUE: bool = true;
 
 /// Launch arguments
 pub enum LaunchArgs {
