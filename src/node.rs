@@ -20,7 +20,8 @@ fn worker(ip: IpAddr, port: u16, node_state_receiver: Receiver<NodeState>) -> Re
     let mut stream = TcpStream::connect((ip, port))?;
     println!("Connected to hub {ip}:{port}");
 
-    // use nonblocking to reduce complexity and send keep-alive messages
+    // use non-blocking stream, and read-timeout channel
+    // reason: we prioritize node state update over remote commands
     stream.set_nonblocking(true)?;
 
     // respond hostname on new connection
@@ -41,6 +42,7 @@ fn worker(ip: IpAddr, port: u16, node_state_receiver: Receiver<NodeState>) -> Re
     loop {
         let mut command_opt = None;
 
+        // peek for a remote command, do not block
         let mut _buf = [0u8; 4];
         match stream.peek(&mut _buf) {
             Ok(_) => command_opt = Some(stream.read::<Command>()?),
@@ -48,17 +50,20 @@ fn worker(ip: IpAddr, port: u16, node_state_receiver: Receiver<NodeState>) -> Re
             Err(e) => Err(e)?,
         };
 
+        // handle command if there is a command
         if let Some(command) = command_opt {
             println!("Received {command}");
             handler::handle_command(&mut stream, &command, &node_state)?;
         }
 
+        // try to receive an update of node state with timeout
         if let Ok(new_node_state) = node_state_receiver.recv_timeout(Duration::from_millis(100)) {
             node_state = new_node_state;
             let (sessions, wg_peers) = &node_state;
             stream.write(&Response::NodeState(sessions.clone(), wg_peers.clone()))?;
         }
 
+        // send keep-alive periodically
         if SystemTime::now() - Duration::from_secs(60) >= last_keepalive {
             stream.write(&Response::KeepAlive)?;
             last_keepalive = SystemTime::now();

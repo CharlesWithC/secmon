@@ -14,7 +14,7 @@ fn handle_command(command: CtrlCmd, hub_state: &HubStateMutex) -> CtrlRes {
         CtrlCmd::List => {
             let guard = hub_state.lock().unwrap();
             let (_, ref nodes) = *guard;
-            CtrlRes::List(nodes.clone())
+            CtrlRes::List(nodes.into_iter().map(|(node, _)| node.clone()).collect())
         }
     }
 }
@@ -29,6 +29,19 @@ fn thread_main(mut stream: UnixStream, hub_state: HubStateMutex) -> Result<()> {
 
         let result = handle_command(command, &hub_state);
         stream.write(&result)?;
+
+        // below is some test code for sending command to remote handler
+
+        // let guard = hub_state.lock().unwrap();
+        // let (_, ref nodes) = *guard;
+        // nodes.into_iter().for_each(|(node, cmd_s)| {
+        //     let (resp_s, resp_r) = unbounded::<Response>();
+        //     let _ = cmd_s.send((Command::SOME_COMMAND, resp_s));
+        //     let resp = resp_r.recv();
+        //     match resp {
+        //         // do something
+        //     }
+        // });
 
         // note: currently, cli only sends one single command in one connection
         // in the future, cli may become interactive where multiple commands may

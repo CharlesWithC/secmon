@@ -19,7 +19,6 @@ pub const DISCONNECT_GRACE_PERIOD: u64 = 30;
 /// Whether to assume hostnames would be unique
 ///
 /// If `true`, then
-///
 ///   - on node reconnect, node of same hostname would immediately replace disconnected node
 pub const ASSUME_HOSTNAME_UNIQUE: bool = true;
 

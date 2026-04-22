@@ -1,4 +1,5 @@
 use anyhow::Result;
+use crossbeam_channel::{Receiver, Sender, TryRecvError, unbounded};
 use std::net::SocketAddr;
 use std::net::{TcpListener, TcpStream};
 use std::sync::Arc;
@@ -6,21 +7,28 @@ use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::iosered::IOSerialized;
-use crate::models::hub::{ErrHubState, HubStateMutex};
+use crate::models::hub::{ChannelPacket, HubStateMutex};
 use crate::models::node::Node;
 use crate::models::packet::Response;
 use crate::models::{ASSUME_HOSTNAME_UNIQUE, DISCONNECT_GRACE_PERIOD};
 
 /// Initializes node connection.
 ///
-/// Returns `serial` of the node for later identification.
-fn handle_new_node(address: &SocketAddr, hostname: &String, hub_state: &HubStateMutex) -> u32 {
+/// Returns `serial` of the node and `receiver` for internal channel packets.
+fn handle_new_node(
+    address: &SocketAddr,
+    hostname: &String,
+    hub_state: &HubStateMutex,
+) -> (u32, Receiver<ChannelPacket>) {
     let mut guard = hub_state.lock().unwrap();
     let (ref mut counter, ref mut nodes) = *guard;
 
     // optionally remove possibly disconnected node of same hostname
     if ASSUME_HOSTNAME_UNIQUE {
-        if let Some(index) = nodes.iter().position(|node| node.hostname == *hostname) {
+        if let Some(index) = nodes
+            .iter()
+            .position(|(node, _)| node.hostname == *hostname)
+        {
             nodes.remove(index);
         }
     }
@@ -28,7 +36,7 @@ fn handle_new_node(address: &SocketAddr, hostname: &String, hub_state: &HubState
     // increment counter for nodes
     *counter += 1;
 
-    // initialize node, add node to vector
+    // initialize node
     let node = Node {
         serial: *counter,
         address: address.clone(),
@@ -38,36 +46,15 @@ fn handle_new_node(address: &SocketAddr, hostname: &String, hub_state: &HubState
         last_state_update: UNIX_EPOCH,
         connected: true,
     };
-    nodes.push(node);
 
-    // return node serial
-    *counter
-}
+    // create channels for cli <=> node communication
+    let (s, r) = unbounded::<ChannelPacket>();
 
-/// Handles response from node.
-///
-/// Updates relevant state in place.
-fn handle_response(
-    serial: u32,
-    response: Response,
-    hub_state: &HubStateMutex,
-) -> Result<(), ErrHubState> {
-    let mut guard = hub_state.lock().unwrap();
-    let (_, ref mut nodes) = *guard;
-    if let Some(index) = nodes.iter().position(|node| node.serial == serial) {
-        match response {
-            Response::NodeState(sessions, wg_peers) => {
-                nodes[index].sessions = sessions;
-                nodes[index].wg_peers = wg_peers;
-                nodes[index].last_state_update = SystemTime::now();
-            }
-            _ => {}
-        }
+    // add node and sender for commands to vector
+    nodes.push((node, s));
 
-        Ok(())
-    } else {
-        Err(ErrHubState::SerialNotRecognized)
-    }
+    // return node serial and receiver for commands
+    (*counter, r)
 }
 
 /// Main thread function for remote node connection.
@@ -75,12 +62,13 @@ fn handle_response(
 /// This is a blocking function and does not exit unless interrupted.
 fn thread_main(mut stream: TcpStream, hub_state: &HubStateMutex) -> Result<()> {
     let mut serial;
+    let mut receiver;
     let address = stream.peer_addr().unwrap();
     let hostname;
 
     if let Response::Connect(_hostname) = stream.read::<Response>()? {
         hostname = _hostname;
-        serial = handle_new_node(&address, &hostname, hub_state);
+        (serial, receiver) = handle_new_node(&address, &hostname, hub_state);
         println!("{address} ({hostname}) connected and was assigned serial {serial}");
     } else {
         return Err(anyhow::anyhow!(
@@ -88,16 +76,73 @@ fn thread_main(mut stream: TcpStream, hub_state: &HubStateMutex) -> Result<()> {
         ));
     }
 
-    loop {
-        let response = stream.read::<Response>()?;
-        println!("{address} ({hostname}) responded {response}");
+    // use read-timeout stream, and non-blocking channel
+    // reason: we prioritize node state update over local commands
+    stream.set_read_timeout(Some(Duration::from_millis(100)))?;
 
-        let result = handle_response(serial, response, hub_state);
-        if let Err(error) = result {
-            match error {
-                ErrHubState::SerialNotRecognized => {
-                    eprintln!("{address} ({hostname}) is not a recognized node");
-                    serial = handle_new_node(&address, &hostname, hub_state);
+    // send the next non-`KeepAlive` non-`NodeState` `Response` here
+    let mut respond_command_response_to: Option<Sender<Response>> = None;
+
+    loop {
+        // only handle new local command when last command is handled
+        // note that, commands are sent serially, and responds are received serially,
+        // and so there is no risk of race condition / mismatch of command and response
+        if let None = respond_command_response_to {
+            // peek for a local command, do not block
+            let mut chanpkt_opt: Option<ChannelPacket> = None;
+            match receiver.try_recv() {
+                Ok(chanpkt) => chanpkt_opt = Some(chanpkt),
+                Err(TryRecvError::Empty) => {}
+                Err(e) => Err(e)?,
+            }
+
+            if let Some((command, sender)) = chanpkt_opt {
+                stream.write(&command)?;
+                respond_command_response_to = Some(sender);
+            }
+        }
+
+        // try to receive a response from node with read timeout
+        // if it's a NodeState, then we happily accept it and update `hub_state`
+        // if it's some other response, then we send it back to the original command sender through channel
+        let mut response_opt = None;
+        let mut _buf = [0u8; 4];
+        match stream.read::<Response>() {
+            // note: stream.read blocks until timeout
+            Ok(response) => response_opt = Some(response),
+            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
+            Err(e) => Err(e)?,
+        };
+
+        if let Some(response) = response_opt {
+            // there is some response
+            println!("{address} ({hostname}) responded {response}");
+
+            match response {
+                Response::KeepAlive => {}  // don't care
+                Response::Connect(_) => {} // should not occur
+                Response::NodeState(sessions, wg_peers) => {
+                    let mut guard = hub_state.lock().unwrap();
+                    let (_, ref mut nodes) = *guard;
+                    if let Some(index) = nodes.iter().position(|(node, _)| node.serial == serial) {
+                        // update node state
+                        let node = &mut nodes[index].0;
+                        node.sessions = sessions;
+                        node.wg_peers = wg_peers;
+                        node.last_state_update = SystemTime::now();
+                    } else {
+                        // for whatever reason, the node got removed from `hub_state`
+                        // note: this should NOT occur but we handle it gracefully here by reinitializing the node
+                        eprintln!("{address} ({hostname}) is not a recognized node");
+                        (serial, receiver) = handle_new_node(&address, &hostname, hub_state);
+                    }
+                }
+                response @ _ => {
+                    // other response, send to original command sender through channel
+                    if let Some(sender) = respond_command_response_to {
+                        sender.send(response)?;
+                        respond_command_response_to = None; // clear sender to accept next command
+                    }
                 }
             }
         }
@@ -120,9 +165,10 @@ pub fn main(listener: TcpListener, hub_state: HubStateMutex) -> () {
                         eprintln!("{e}");
                     }
 
+                    // update `hub_state` to indicate disconnection
                     let mut guard = hub_state.lock().unwrap();
                     let (_, ref mut nodes) = *guard;
-                    nodes.iter_mut().for_each(|node| {
+                    nodes.iter_mut().for_each(|(node, _)| {
                         if node.address == address {
                             node.connected = false;
                         }
@@ -131,9 +177,11 @@ pub fn main(listener: TcpListener, hub_state: HubStateMutex) -> () {
 
                     thread::sleep(Duration::from_secs(DISCONNECT_GRACE_PERIOD));
 
+                    // delete node from `hub_state` after grace period
                     let mut guard = hub_state.lock().unwrap();
                     let (_, ref mut nodes) = *guard;
-                    if let Some(index) = nodes.iter().position(|node| node.address == address) {
+                    if let Some(index) = nodes.iter().position(|(node, _)| node.address == address)
+                    {
                         nodes.remove(index);
                     } // note: `ASSUME_HOSTNAME_UNIQUE` can lead to early removal
                 });

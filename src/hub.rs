@@ -4,11 +4,17 @@ use std::os::unix::net::UnixListener;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-use crate::models::hub::HubStateMutex;
-use crate::models::node::Node;
+use crate::models::hub::{HubNodes, HubStateMutex};
 
 mod local;
 mod remote;
+
+// Flow of data between cli <=> node
+//  - cli creates initiates `UnixStream` to `hub/local` and sends commands
+//  - `hub/local` sends `Packet` to corresponding `hub/node`, using channel in `HubState`
+//  - `hub/node` sends `Command` to remote `node`
+//  - remote `node` returns `Response` to `hub/node`
+//  - `hub/node` sends `Response` to `hub/local`, using `Sender<Packet>` provided by `hub/local` earlier
 
 /// Hub main function for handling remote node connections and local control commands.
 ///
@@ -22,9 +28,7 @@ pub fn main(ip: IpAddr, port: u16, socket_path: String) -> Result<()> {
         TcpListener::bind((ip, port)).map_err(|e| anyhow!("Unable to bind {ip}:{port}: {e}"))?;
     println!("Listening on {ip}:{port} for nodes");
 
-    // mutex = (counter: u32, nodes: Vec(Node))
-    // 'counter' helps find the entry in the vector for the node
-    let hub_state: HubStateMutex = Arc::new(Mutex::new((0, Vec::<Node>::new())));
+    let hub_state: HubStateMutex = Arc::new(Mutex::new((0, HubNodes::new())));
 
     thread::scope(|s| {
         let hub_state_local: HubStateMutex = Arc::clone(&hub_state);

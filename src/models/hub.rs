@@ -1,25 +1,25 @@
+use crossbeam_channel::Sender;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::sync::{Arc, Mutex};
 
 use crate::models::node::Node;
+use crate::models::packet::{Command, Response};
 
-pub type HubState = (u32, Vec<Node>);
+/// Represents data sent in internal channel between command and node handler.
+///
+/// The `Sender<Response>` is a one-time channel for node handler to return response to.
+///
+/// This is as if sending a mail with a return envelop attached.
+pub type ChannelPacket = (Command, Sender<Response>);
+/// Represents a vector of connected nodes.
+/// 
+/// The `Sender<ChannelPacket>` is a long-living channel to send local commands to.
+/// 
+/// This is as if telling someone your mail carrier's name who would deliver mails to you.
+pub type HubNodes = Vec<(Node, Sender<ChannelPacket>)>;
+pub type HubState = (u32, HubNodes); // (counter, nodes)
 pub type HubStateMutex = Arc<Mutex<HubState>>;
-
-/// Error when updating hub state
-pub enum ErrHubState {
-    /// Node cannot be recognized based on serial
-    SerialNotRecognized,
-}
-
-impl fmt::Display for ErrHubState {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            ErrHubState::SerialNotRecognized => write!(f, "SerialNotRecognized"),
-        }
-    }
-}
 
 /// Represents a command line control command.
 #[derive(Serialize, Deserialize)]
