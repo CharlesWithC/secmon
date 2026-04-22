@@ -13,13 +13,18 @@ use crate::models::{DEFAULT_HOST, DEFAULT_PORT, LaunchArgs, NodeConfig};
 use crate::utils::{get_env_var, get_env_var_strict};
 
 const USAGE: &str = "Usage:
-  secmon hub                    launch hub server
-  secmon node [who] [wg]        launch node server
-    [--reconnect]               reconnect if connection lost
-  secmon help                   print this help message
+  secmon hub                        launch hub server
+  secmon node [who] [wg]            launch node server
+    [--reconnect]
+  secmon help                       print this help message
 
 Hub control commands:
-  secmon list                   list all connected nodes
+  secmon list                       list all connected nodes
+  secmon <node> service             enable/disable some systemctl services
+    <enable|disable> [--now]
+    <service> [<service>...]
+  secmon <node> reboot +<minutes>   reboot server in X minutes
+  secmon <node> shutdown-cancel     cancel shutdown
 
 Environment:
   HOST=<host> PORT=<port> secmon hub
@@ -53,7 +58,7 @@ fn launch(launch_args: LaunchArgs) -> Result<()> {
         LaunchArgs::Node(ip, port, node_config) => {
             crate::node::main(ip, port, node_config)?;
         }
-        LaunchArgs::Cli(command, args) => {
+        LaunchArgs::Cli(command) => {
             let socket_path = get_socket_path();
             if !fs::exists(&socket_path)
                 .map_err(|e| anyhow!("Unable to access {socket_path}: {e}"))?
@@ -63,7 +68,7 @@ fn launch(launch_args: LaunchArgs) -> Result<()> {
                 ));
             }
 
-            crate::cli::main(socket_path, command, args)?;
+            crate::cli::main(socket_path, command)?;
         }
     }
 
@@ -102,15 +107,11 @@ fn main() {
                 },
             )
         }
-        command @ "list" => LaunchArgs::Cli(command.to_owned(), args[2..].to_vec()),
         "help" => {
             eprintln!("{USAGE}");
             process::exit(0);
         }
-        _ => {
-            eprintln!("{USAGE}");
-            process::exit(1);
-        }
+        _ => LaunchArgs::Cli(args.into_iter().skip(1).collect::<Vec<_>>().join(" ")),
     };
 
     if let Err(e) = launch(launch_args) {

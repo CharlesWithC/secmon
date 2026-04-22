@@ -4,16 +4,29 @@ use std::fmt;
 use crate::models::nodestate::{SessionsResult, WgPeersResult};
 
 #[derive(Serialize, Deserialize)]
+/// Represents whether to enable or disable a service.
+pub enum ServiceMode {
+    Enable,
+    Disable,
+}
+
+impl fmt::Display for ServiceMode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ServiceMode::Enable => write!(f, "Enable"),
+            ServiceMode::Disable => write!(f, "Disable"),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize)]
 /// Reprents a Command sent from hub to node.
 pub enum Command {
     /// Request current node state
     NodeState,
 
-    /// Enable a systemctl service
-    ServiceEnable(FlagNow, ServiceName),
-
-    /// Disable a systemctl service
-    ServiceDisable(FlagNow, ServiceName),
+    /// Manage some systemctl services
+    Service(ServiceMode, FlagNow, Vec<ServiceName>),
 
     /// Schedule node server reboot
     Reboot(Minutes),
@@ -30,16 +43,11 @@ impl fmt::Display for Command {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Command::NodeState => write!(f, "Command::NodeState"),
-            Command::ServiceEnable(now, service) => {
+            Command::Service(mode, now, services) => {
                 write!(
                     f,
-                    "Command::ServiceEnable(now={now}, service=\"{service}\")"
-                )
-            }
-            Command::ServiceDisable(now, service) => {
-                write!(
-                    f,
-                    "Command::ServiceDisable(now={now}, service=\"{service}\")"
+                    "Command::ServiceEnable(mode=\"{mode}\", now={now}, services=\"{}\")",
+                    services.join(", ")
                 )
             }
             Command::Reboot(minutes) => {

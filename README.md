@@ -12,15 +12,13 @@ Start `hub` server with `secmon hub`.
 
 Start `node` server with `HUB_IP=<ip> secmon node [who] [wg] [--reconnect]`.
 
+Various management commands can be used on the server running `hub` - see `secmon help` for more information.
+
 Note that `hub` does not monitor its own resources, and so a `node` may be launched on the same server as `hub`.
 
-The resources to be monitored is selected with positional arguments `[who]`, `[wg]`. A resource will not be monitored if the corresponding argument is not provided.
+The resources to be monitored is selected with positional arguments `[who]`, `[wg]`. Resource is monitored if the corresponding argument is not provided.
 
-Nodes will check for monitored resources every second, and update `hub` once something is updated.
-
-[TODO] Node should only update hub on what exactly is changed - i.e. node should not sync back states on all resources if only one changes.
-
-[TODO] Various commands may be used on the `hub` server to view status and manage `node`.
+Nodes will check monitored resources every second, and update `hub` once something changes.
 
 ## Notes
 

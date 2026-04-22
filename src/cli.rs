@@ -1,11 +1,28 @@
 use anyhow::{Result, anyhow};
-use chrono::DateTime;
-use chrono::offset::Local;
-use colored::Colorize;
 use std::os::unix::net::UnixStream;
 
 use crate::iosered::IOSerialized;
 use crate::models::hub::{CtrlCmd, CtrlRes};
+use crate::models::node::Node;
+use crate::models::packet::{Command, ServiceMode};
+
+mod handler;
+
+/// Sends `FindNode` command to hub daemon,
+/// returns `Node` if found; otherwise, raises an error.
+fn find_node(stream: &mut UnixStream, node: String) -> Result<Node> {
+    stream.write(&CtrlCmd::FindNode((*node).to_owned()))?;
+    let node_res = stream.read::<CtrlRes>()?;
+    match node_res {
+        CtrlRes::Failure(error) => Err(anyhow!("Failure: {error}")),
+        CtrlRes::Node(node) => Ok(node),
+        _ => {
+            return Err(anyhow!(
+                "Hub daemon provided an invalid response: {node_res}"
+            ));
+        }
+    }
+}
 
 /// Control main function for handling local control command.
 ///
@@ -15,82 +32,76 @@ use crate::models::hub::{CtrlCmd, CtrlRes};
 ///
 /// In the future, interactive sessions may be supported,
 /// which would make this function blocking.
-pub fn main(socket_path: String, command: String, _args: Vec<String>) -> Result<()> {
+pub fn main(socket_path: String, command: String) -> Result<()> {
     let mut stream = UnixStream::connect(socket_path)?;
 
-    match command.as_str() {
-        "list" => {
+    match command.split_whitespace().collect::<Vec<_>>().as_slice() {
+        ["list", ..] => {
             stream.write(&CtrlCmd::List)?;
 
             let result = stream.read::<CtrlRes>()?;
-            match result {
-                CtrlRes::List(nodes) => {
-                    for (i, node) in nodes.iter().enumerate() {
-                        if i != 0 {
-                            println!("");
-                        }
-
-                        println!("{}: {}", "node".green().bold(), node.hostname.green());
-                        println!("  {}: {}", "address".bold(), node.address);
-                        let last_state_update_dt: DateTime<Local> = node.last_state_update.into();
-                        println!(
-                            "  {}: {}",
-                            "last state update".bold(),
-                            last_state_update_dt.format("%F %T")
-                        );
-                        println!(
-                            "  {}? {}",
-                            "connected".bold(),
-                            if node.connected {
-                                "yes".green()
-                            } else {
-                                "no".red()
-                            }
-                        );
-
-                        match &node.sessions {
-                            Ok(sessions) => sessions.into_iter().for_each(|session| {
-                                println!("");
-                                println!("{}: {}", "session".yellow().bold(), session.user);
-                                if let Some(from) = &session.from {
-                                    println!("  {}: {}", "from".bold(), from);
-                                }
-
-                                let dt: DateTime<Local> = session.login.into();
-                                let parsed: String = format!("{}", dt.format("%F %T"));
-                                println!("  {}: {}", "login".bold(), parsed);
-                            }),
-                            Err(e) => {
-                                println!("");
-                                println!("{}: {}", "sessions".yellow().bold(), e);
-                            }
-                        }
-
-                        match &node.wg_peers {
-                            Ok(wg_peers) => wg_peers.into_iter().for_each(|wg_peer| {
-                                println!("");
-                                println!("{}: {}", "wg peer".yellow().bold(), wg_peer.peer);
-                                println!("  {}: {}", "interface".bold(), wg_peer.interface);
-                                if let Some(endpoint) = &wg_peer.endpoint {
-                                    println!("  {}: {}", "endpoint".bold(), endpoint);
-                                }
-                                if let Some(latest_handshake) = &wg_peer.latest_handshake {
-                                    let dt: DateTime<Local> = (*latest_handshake).into();
-                                    let parsed = format!("{}", dt.format("%F %T"));
-
-                                    println!("  {}: {}", "latest handshake".bold(), parsed);
-                                }
-                            }),
-                            Err(e) => {
-                                println!("");
-                                println!("{}: {}", "wg peers".yellow().bold(), e);
-                            }
-                        }
-                    }
-                    Ok(())
-                } // _ => Err(anyhow!("Received invalid response from hub: {result}")),
-            }
+            stream.write(&CtrlCmd::Quit)?;
+            handler::handle_result(result)?;
         }
-        _ => Err(anyhow!("Unknown command; Use 'secmon help' for help")),
+        [node, "service", mode @ ("enable" | "disable"), args @ ..] => {
+            let mode = if mode == &"enable" {
+                ServiceMode::Enable
+            } else {
+                ServiceMode::Disable
+            };
+
+            let flag_now = args.contains(&"--now");
+            let has_more_flags = args.iter().any(|v| v.starts_with("-") && v != &"--now");
+            if has_more_flags {
+                return Err(anyhow!("Only --now flag is allowed"));
+            }
+
+            let services = args
+                .iter()
+                .filter(|v| !v.starts_with("--"))
+                .map(|v| (*v).to_owned())
+                .collect::<Vec<String>>();
+            if services.len() == 0 {
+                return Err(anyhow!("At least one service must be specified"));
+            }
+
+            let node = find_node(&mut stream, (*node).to_owned())?;
+            stream.write(&CtrlCmd::RawCommand(
+                node.serial,
+                Command::Service(mode, flag_now, services),
+            ))?;
+
+            let result = stream.read::<CtrlRes>()?;
+            stream.write(&CtrlCmd::Quit)?;
+            handler::handle_result(result)?;
+        }
+        [node, "reboot", args @ ..] => {
+            let minutes = args
+                .iter()
+                .find(|v| v.starts_with("+"))
+                .map(|v| {
+                    v.parse::<u32>()
+                        .map_err(|e| anyhow!("Unable to parse \"+<minutes>\": {e}"))
+                })
+                .ok_or(anyhow!("\"+<minutes>\" must be provided"))??;
+
+            let node = find_node(&mut stream, (*node).to_owned())?;
+            stream.write(&CtrlCmd::RawCommand(node.serial, Command::Reboot(minutes)))?;
+
+            let result = stream.read::<CtrlRes>()?;
+            stream.write(&CtrlCmd::Quit)?;
+            handler::handle_result(result)?;
+        }
+        [node, "shutdown-cancel"] => {
+            let node = find_node(&mut stream, (*node).to_owned())?;
+            stream.write(&CtrlCmd::RawCommand(node.serial, Command::ShutdownCancel))?;
+
+            let result = stream.read::<CtrlRes>()?;
+            stream.write(&CtrlCmd::Quit)?;
+            handler::handle_result(result)?;
+        }
+        _ => Err(anyhow!("Invalid command; Use 'secmon help' for help"))?,
     }
+
+    Ok(())
 }

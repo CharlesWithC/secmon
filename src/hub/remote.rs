@@ -34,6 +34,8 @@ fn handle_new_node(
     }
 
     // increment counter for nodes
+    // note: we must increment counter first to avoid serial 0
+    // serial 0 is reserved for special use cases, such as referring to all connected nodes
     *counter += 1;
 
     // initialize node

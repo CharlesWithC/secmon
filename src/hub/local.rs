@@ -1,10 +1,12 @@
 use anyhow::Result;
+use crossbeam_channel::unbounded;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::sync::Arc;
 use std::thread;
 
 use crate::iosered::IOSerialized;
 use crate::models::hub::{CtrlCmd, CtrlRes, HubStateMutex};
+use crate::models::packet::Response;
 
 /// Handles local cli command.
 ///
@@ -16,6 +18,41 @@ fn handle_command(command: CtrlCmd, hub_state: &HubStateMutex) -> CtrlRes {
             let (_, ref nodes) = *guard;
             CtrlRes::List(nodes.into_iter().map(|(node, _)| node.clone()).collect())
         }
+        CtrlCmd::FindNode(query) => {
+            let guard = hub_state.lock().unwrap();
+            let (_, ref nodes) = *guard;
+
+            nodes
+                .iter()
+                .find(|(node, _)| {
+                    // query based on hostname, then address
+                    node.hostname == query
+                        || node.address.to_string().split(":").next() == Some(&query)
+                })
+                .map(|(node, _)| CtrlRes::Node(node.clone()))
+                .unwrap_or(CtrlRes::Failure(format!(
+                    "unable to identify node with '{query}'"
+                )))
+        }
+        CtrlCmd::RawCommand(serial, command) => {
+            let guard = hub_state.lock().unwrap();
+            let (_, ref nodes) = *guard;
+
+            if let Some((_, sender)) = nodes.iter().find(|(node, _)| node.serial == serial) {
+                let (resp_s, resp_r) = unbounded::<Response>();
+                if let Err(e) = sender.send((command, resp_s)) {
+                    return CtrlRes::Failure(format!("{e}"));
+                }
+                let resp_res = resp_r.recv();
+                match resp_res {
+                    Ok(resp) => CtrlRes::RawResponse(resp),
+                    Err(e) => CtrlRes::Failure(format!("{e}")),
+                }
+            } else {
+                CtrlRes::Failure(format!("SERIAL={serial} is not a recognized node"))
+            }
+        }
+        CtrlCmd::Quit => panic!("`CtrlCmd::Quit` should not be handled by `handle_command`"),
     }
 }
 
@@ -26,29 +63,12 @@ fn thread_main(mut stream: UnixStream, hub_state: HubStateMutex) -> Result<()> {
     loop {
         let command = stream.read::<CtrlCmd>()?;
         println!("Received {command}");
+        if let CtrlCmd::Quit = command {
+            return Ok(());
+        }
 
         let result = handle_command(command, &hub_state);
         stream.write(&result)?;
-
-        // below is some test code for sending command to remote handler
-
-        // let guard = hub_state.lock().unwrap();
-        // let (_, ref nodes) = *guard;
-        // nodes.into_iter().for_each(|(node, cmd_s)| {
-        //     let (resp_s, resp_r) = unbounded::<Response>();
-        //     let _ = cmd_s.send((Command::SOME_COMMAND, resp_s));
-        //     let resp = resp_r.recv();
-        //     match resp {
-        //         // do something
-        //     }
-        // });
-
-        // note: currently, cli only sends one single command in one connection
-        // in the future, cli may become interactive where multiple commands may
-        // be sent in one connection.
-        // we return Ok(()) directly after first interaction for now, to avoid
-        // connection closed error.
-        return Ok(());
     }
 }
 

@@ -5,7 +5,7 @@ use std::process;
 use crate::iosered::IOSerialized;
 use crate::models::NodeConfig;
 use crate::models::nodestate::NodeState;
-use crate::models::packet::{Command, Response};
+use crate::models::packet::{Command, Response, ServiceMode};
 use crate::node::state::{get_sessions, get_wg_peers};
 use crate::utils::parse_command_output;
 
@@ -28,17 +28,16 @@ pub fn handle_command(
             let (sessions, wg_peers) = node_state;
             stream.write(&Response::NodeState(sessions.clone(), wg_peers.clone()))?;
         }
-        Command::ServiceEnable(now, service) | Command::ServiceDisable(now, service) => {
-            let mode = match command {
-                Command::ServiceEnable(..) => "enable",
-                Command::ServiceDisable(..) => "disable",
-                _ => panic!("should not happen"),
+        Command::Service(mode, now, services) => {
+            let mode = match mode {
+                ServiceMode::Enable => "enable",
+                ServiceMode::Disable => "disable",
             };
 
             let args: Vec<&str> = [mode]
                 .into_iter()
                 .chain(now.then_some("--now"))
-                .chain(Some(service.as_str()))
+                .chain(services.into_iter().map(|v| v.as_str()))
                 .collect();
 
             let result = parse_command_output(
