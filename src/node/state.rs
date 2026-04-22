@@ -2,20 +2,16 @@ use chrono::{Local, NaiveDateTime};
 use std::process::Command;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use crate::exec::Exec;
 use crate::models::nodestate::{Session, SessionsResult, WgPeer, WgPeersResult};
-use crate::utils::parse_command_output;
 
 /// Executes `who -w` and returns parsed result.
 ///
 /// If an error occurs, returns a string-based error.
 pub fn get_sessions() -> SessionsResult {
-    let output = parse_command_output(
-        "who",
-        Command::new("who")
-            .args(["-w"])
-            .env("LC_ALL", "C.UTF-8") // ensure consistent time format
-            .output(),
-    )?;
+    let mut command = Command::new("who");
+    command.args(["-w"]).env("LC_ALL", "C.UTF-8");
+    let output = command.run()?;
 
     let mut sessions = Vec::<Session>::new();
 
@@ -63,12 +59,9 @@ pub fn get_wg_peers() -> WgPeersResult {
 
     let mut wg_peers = Vec::<WgPeer>::new();
 
-    let output_endpoints = parse_command_output(
-        "wg",
-        Command::new("wg")
-            .args(["show", "all", "endpoints"])
-            .output(),
-    )?;
+    let mut command = Command::new("wg");
+    command.args(["show", "all", "endpoints"]);
+    let output_endpoints = command.run()?;
     for line in output_endpoints.lines() {
         let parts = line.split_whitespace().collect::<Vec<_>>();
         if parts.len() < 3 {
@@ -86,12 +79,10 @@ pub fn get_wg_peers() -> WgPeersResult {
             latest_handshake: None,
         })
     }
-    let output_handshake = parse_command_output(
-        "wg",
-        Command::new("wg")
-            .args(["show", "all", "latest-handshakes"])
-            .output(),
-    )?;
+
+    let mut command = Command::new("wg");
+    command.args(["show", "all", "latest-handshakes"]);
+    let output_handshake = command.run()?;
     for line in output_handshake.lines() {
         let parts = line.split_whitespace().collect::<Vec<_>>();
         if parts.len() < 3 {

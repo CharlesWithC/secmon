@@ -3,6 +3,7 @@ use std::fs;
 use std::{env, process};
 
 mod cli;
+mod exec;
 mod hub;
 mod iosered;
 mod models;

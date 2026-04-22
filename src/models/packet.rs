@@ -46,8 +46,8 @@ impl fmt::Display for Command {
             Command::Service(mode, now, services) => {
                 write!(
                     f,
-                    "Command::ServiceEnable(mode=\"{mode}\", now={now}, services=\"{}\")",
-                    services.join(", ")
+                    "Command::ServiceEnable(mode=\"{mode}\", now={now}, services=[\"{}\"])",
+                    services.join("\", \"")
                 )
             }
             Command::Reboot(minutes) => {

@@ -2,12 +2,12 @@ use anyhow::Result;
 use std::net::TcpStream;
 use std::process;
 
+use crate::exec::Exec;
 use crate::iosered::IOSerialized;
 use crate::models::NodeConfig;
 use crate::models::nodestate::NodeState;
 use crate::models::packet::{Command, Response, ServiceMode};
 use crate::node::state::{get_sessions, get_wg_peers};
-use crate::utils::parse_command_output;
 
 /// Returns `Response::Result` constructed from `Result`.
 fn response_result(result: Result<String, String>) -> Response {
@@ -40,11 +40,9 @@ pub fn handle_command(
                 .chain(services.into_iter().map(|v| v.as_str()))
                 .collect();
 
-            let result = parse_command_output(
-                "systemctl",
-                process::Command::new("systemctl").args(args).output(),
-            );
-            stream.write(&response_result(result))?;
+            let mut command = process::Command::new("systemctl");
+            command.args(args);
+            stream.write(&response_result(command.run()))?;
         }
         Command::Reboot(minutes) => {
             let minutes_arg = format!("+{minutes}");
@@ -54,18 +52,14 @@ pub fn handle_command(
                 .chain(Some(minutes_arg.as_str()))
                 .collect();
 
-            let result = parse_command_output(
-                "shutdown",
-                process::Command::new("shutdown").args(args).output(),
-            );
-            stream.write(&response_result(result))?;
+            let mut command = process::Command::new("shutdown");
+            command.args(args);
+            stream.write(&response_result(command.run()))?;
         }
         Command::ShutdownCancel => {
-            let result = parse_command_output(
-                "shutdown",
-                process::Command::new("shutdown").args(["-c"]).output(),
-            );
-            stream.write(&response_result(result))?;
+            let mut command = process::Command::new("shutdown");
+            command.args(["-c"]);
+            stream.write(&response_result(command.run()))?;
         }
     };
 
