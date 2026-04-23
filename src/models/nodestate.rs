@@ -9,8 +9,10 @@ use crate::utils::get_display_len;
 
 type ErrorMessage = String;
 
-#[derive(Serialize, Deserialize, Clone, PartialEq)]
 /// Full state of a node
+///
+/// A `None` attribute means that the attribute is not monitored.
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
 pub struct NodeState {
     pub sessions: SessionsOpt,
     pub wg_peers: WgPeersOpt,
@@ -27,7 +29,29 @@ impl fmt::Display for NodeState {
     }
 }
 
+/// The difference of a node state
+///
+/// A `None` attribute means the attribute is not updated.
 #[derive(Serialize, Deserialize, Clone, PartialEq)]
+pub struct NodeStateDiff {
+    pub sessions: Option<SessionsOpt>,
+    pub wg_peers: Option<WgPeersOpt>,
+}
+
+impl fmt::Display for NodeStateDiff {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut diff = Vec::<String>::new();
+        if let Some(ref sessions) = self.sessions {
+            diff.push(format!("sessions[{}]", get_display_len(sessions)));
+        };
+        if let Some(ref wg_peers) = self.wg_peers {
+            diff.push(format!("wg_peers[{}]", get_display_len(wg_peers)));
+        };
+        write!(f, "NodeStateDiff({})", diff.join(", "))
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 /// User session collected by node
 pub struct Session {
     /// Name of user relevant to the session

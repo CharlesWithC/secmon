@@ -139,6 +139,24 @@ fn thread_main(mut stream: TcpStream, hub_state: &HubStateMutex) -> Result<()> {
                         (serial, receiver) = handle_new_node(&address, &hostname, hub_state);
                     }
                 }
+                Response::NodeStateDiff(diff) => {
+                    let mut guard = hub_state.lock().unwrap();
+                    let (_, ref mut nodes) = *guard;
+                    if let Some(index) = nodes.iter().position(|(node, _)| node.serial == serial) {
+                        // update node state based on difference
+                        let node = &mut nodes[index].0;
+                        if let Some(sessions) = diff.sessions {
+                            node.sessions = sessions;
+                        }
+                        if let Some(wg_peers) = diff.wg_peers {
+                            node.wg_peers = wg_peers;
+                        }
+                        node.last_state_update = SystemTime::now();
+                    } else {
+                        eprintln!("{address} ({hostname}) is not a recognized node");
+                        (serial, receiver) = handle_new_node(&address, &hostname, hub_state);
+                    }
+                }
                 response @ _ => {
                     // other response, send to original command sender through channel
                     if let Some(sender) = respond_command_response_to {

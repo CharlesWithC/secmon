@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-use crate::models::nodestate::NodeState;
+use crate::models::nodestate::{NodeState, NodeStateDiff};
 
 #[derive(Serialize, Deserialize)]
 /// Whether to enable or disable a service
@@ -71,8 +71,11 @@ pub enum Response {
     /// This response is only sent once on connection establishment
     Connect(Hostname),
 
-    /// Node state of Session and WgPeer
+    /// Full node state of Session and WgPeer
     NodeState(NodeState),
+
+    /// Difference of node state compared with last update
+    NodeStateDiff(NodeStateDiff),
 
     /// Generic result of a command
     Result(Success, Message),
@@ -88,6 +91,7 @@ impl fmt::Display for Response {
             Response::KeepAlive => write!(f, "Response::KeepAlive"),
             Response::Connect(hostname) => write!(f, "Response::Connect(hostname=\"{hostname}\")"),
             Response::NodeState(node_state) => write!(f, "Response::{node_state}",),
+            Response::NodeStateDiff(diff) => write!(f, "Response::{diff}",),
             Response::Result(success, message) => write!(
                 f,
                 "Response::Result(success={success}, message=\"{message}\")"

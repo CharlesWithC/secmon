@@ -5,7 +5,7 @@ use std::process;
 use crate::exec::Exec;
 use crate::iosered::IOSerialized;
 use crate::models::NodeConfig;
-use crate::models::nodestate::NodeState;
+use crate::models::nodestate::{NodeState, NodeStateDiff};
 use crate::models::packet::{Command, Response, ServiceMode};
 use crate::node::state::{get_sessions, get_wg_peers};
 
@@ -67,8 +67,11 @@ pub fn handle_command(
 
 /// Fetches and updates `node_state` in place.
 ///
-/// If some update is made, returns `true`; otherwise, `false`.
-pub fn update_node_state(node_config: NodeConfig, node_state: &mut NodeState) -> bool {
+/// Returns whether an update is made, and the difference between new and old node state.
+pub fn update_node_state(
+    node_config: NodeConfig,
+    node_state: &mut NodeState,
+) -> (bool, NodeStateDiff) {
     let sessions = if node_config.enable_sessions {
         Some(get_sessions())
     } else {
@@ -81,11 +84,21 @@ pub fn update_node_state(node_config: NodeConfig, node_state: &mut NodeState) ->
         None
     };
 
-    let new_node_state = NodeState { sessions, wg_peers };
-    if *node_state != new_node_state {
-        *node_state = new_node_state;
-        true
-    } else {
-        false
+    let mut diff = NodeStateDiff {
+        sessions: None,
+        wg_peers: None,
+    };
+    let mut updated = false;
+    if sessions != (*node_state).sessions {
+        (*node_state).sessions = sessions.clone();
+        diff.sessions = Some(sessions);
+        updated = true;
     }
+    if wg_peers != (*node_state).wg_peers {
+        (*node_state).wg_peers = wg_peers.clone();
+        diff.wg_peers = Some(wg_peers);
+        updated = true;
+    }
+
+    (updated, diff)
 }

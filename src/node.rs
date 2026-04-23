@@ -10,13 +10,17 @@ mod handler;
 mod state;
 use crate::iosered::IOSerialized;
 use crate::models::NodeConfig;
-use crate::models::nodestate::NodeState;
+use crate::models::nodestate::{NodeState, NodeStateDiff};
 use crate::models::packet::{Command, Response};
 
 /// The real main function that handles commands and responses.
 ///
 /// This is a blocking function and does not exit unless interrupted.
-fn worker(ip: IpAddr, port: u16, node_state_receiver: Receiver<NodeState>) -> Result<()> {
+fn worker(
+    ip: IpAddr,
+    port: u16,
+    node_state_receiver: Receiver<(NodeState, NodeStateDiff)>,
+) -> Result<()> {
     let mut stream = TcpStream::connect((ip, port))?;
     println!("Connected to hub {ip}:{port}");
 
@@ -57,9 +61,11 @@ fn worker(ip: IpAddr, port: u16, node_state_receiver: Receiver<NodeState>) -> Re
         }
 
         // try to receive an update of node state with timeout
-        if let Ok(new_node_state) = node_state_receiver.recv_timeout(Duration::from_millis(100)) {
+        if let Ok((new_node_state, diff)) =
+            node_state_receiver.recv_timeout(Duration::from_millis(100))
+        {
             node_state = new_node_state;
-            stream.write(&Response::NodeState(node_state.clone()))?;
+            stream.write(&Response::NodeStateDiff(diff.clone()))?;
         }
 
         // send keep-alive periodically
@@ -79,7 +85,7 @@ pub fn main(ip: IpAddr, port: u16, node_config: NodeConfig) -> Result<()> {
     loop {
         let result = thread::scope(|s| {
             let terminate_flag = Arc::new(Mutex::new(false));
-            let (node_state_sender, node_state_receiver) = channel::<NodeState>();
+            let (node_state_sender, node_state_receiver) = channel::<(NodeState, NodeStateDiff)>();
 
             {
                 // thread that keeps track of node state changes
@@ -97,9 +103,10 @@ pub fn main(ip: IpAddr, port: u16, node_config: NodeConfig) -> Result<()> {
                             // need to unwrap inside for (obvious) scoping reasons
                             return Ok(());
                         }
-                        let updated = handler::update_node_state(node_config, &mut node_state);
+                        let (updated, diff) =
+                            handler::update_node_state(node_config, &mut node_state);
                         if updated {
-                            node_state_sender.send(node_state.clone())?;
+                            node_state_sender.send((node_state.clone(), diff))?;
                         }
                         thread::sleep(Duration::from_secs(1));
                     }
