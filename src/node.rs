@@ -33,10 +33,10 @@ fn worker(ip: IpAddr, port: u16, node_state_receiver: Receiver<NodeState>) -> Re
     ))?;
 
     // some local states
-    let mut node_state: NodeState = (
-        Err("Initializing".to_owned()),
-        Err("Initializing".to_owned()),
-    );
+    let mut node_state = NodeState {
+        sessions: None,
+        wg_peers: None,
+    };
     let mut last_keepalive = SystemTime::now();
 
     loop {
@@ -59,8 +59,7 @@ fn worker(ip: IpAddr, port: u16, node_state_receiver: Receiver<NodeState>) -> Re
         // try to receive an update of node state with timeout
         if let Ok(new_node_state) = node_state_receiver.recv_timeout(Duration::from_millis(100)) {
             node_state = new_node_state;
-            let (sessions, wg_peers) = &node_state;
-            stream.write(&Response::NodeState(sessions.clone(), wg_peers.clone()))?;
+            stream.write(&Response::NodeState(node_state.clone()))?;
         }
 
         // send keep-alive periodically
@@ -89,10 +88,10 @@ pub fn main(ip: IpAddr, port: u16, node_config: NodeConfig) -> Result<()> {
                 let terminate_flag = Arc::clone(&terminate_flag);
                 s.spawn(move || -> Result<()> {
                     // local node state tracker, not directly shared with worker
-                    let mut node_state: NodeState = (
-                        Err("initializing".to_owned()),
-                        Err("initializing".to_owned()),
-                    );
+                    let mut node_state = NodeState {
+                        sessions: None,
+                        wg_peers: None,
+                    };
                     loop {
                         if *terminate_flag.lock().unwrap() {
                             // need to unwrap inside for (obvious) scoping reasons

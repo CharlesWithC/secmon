@@ -5,7 +5,8 @@ use std::fmt;
 use std::net::SocketAddr;
 use std::time::SystemTime;
 
-use crate::models::nodestate::{SessionsResult, WgPeersResult};
+use crate::models::nodestate::{SessionsOpt, WgPeersOpt};
+use crate::utils::get_display_len;
 
 /// Instance of a node
 #[derive(Serialize, Deserialize, Clone)]
@@ -19,9 +20,9 @@ pub struct Node {
     /// Hostname of node
     pub hostname: String,
     /// User sessions collected by node
-    pub sessions: SessionsResult,
+    pub sessions: SessionsOpt,
     /// WireGuard peers collected by node
-    pub wg_peers: WgPeersResult,
+    pub wg_peers: WgPeersOpt,
     /// Last state update received from node
     pub last_state_update: SystemTime,
     /// Whether node is connected
@@ -39,14 +40,8 @@ impl fmt::Display for Node {
             self.serial,
             self.hostname,
             self.address,
-            self.sessions
-                .as_ref()
-                .map(|v| v.len() as isize)
-                .unwrap_or(-1),
-            self.wg_peers
-                .as_ref()
-                .map(|v| v.len() as isize)
-                .unwrap_or(-1),
+            get_display_len(&self.sessions),
+            get_display_len(&self.wg_peers),
             last_update_dt
         )
     }

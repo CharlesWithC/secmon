@@ -5,9 +5,27 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::time::SystemTime;
 
+use crate::utils::get_display_len;
+
 type ErrorMessage = String;
 
-pub type NodeState = (SessionsResult, WgPeersResult);
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
+/// Full state of a node
+pub struct NodeState {
+    pub sessions: SessionsOpt,
+    pub wg_peers: WgPeersOpt,
+}
+
+impl fmt::Display for NodeState {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "NodeState(sessions[{}], wg_peers[{}])",
+            get_display_len(&self.sessions),
+            get_display_len(&self.wg_peers)
+        )
+    }
+}
 
 #[derive(Serialize, Deserialize, Clone, PartialEq)]
 /// User session collected by node
@@ -20,8 +38,8 @@ pub struct Session {
     pub login: SystemTime,
 }
 
-pub type Sessions = Vec<Session>;
-pub type SessionsResult = Result<Sessions, ErrorMessage>;
+pub type Sessions = Result<Vec<Session>, ErrorMessage>;
+pub type SessionsOpt = Option<Sessions>;
 
 impl fmt::Display for Session {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -51,8 +69,8 @@ pub struct WgPeer {
     pub latest_handshake: Option<SystemTime>,
 }
 
-pub type WgPeers = Vec<WgPeer>;
-pub type WgPeersResult = Result<WgPeers, ErrorMessage>;
+pub type WgPeers = Result<Vec<WgPeer>, ErrorMessage>;
+pub type WgPeersOpt = Option<WgPeers>;
 
 impl fmt::Display for WgPeer {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

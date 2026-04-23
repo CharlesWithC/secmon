@@ -43,8 +43,8 @@ fn handle_new_node(
         serial: *counter,
         address: address.clone(),
         hostname: hostname.clone(),
-        sessions: Err("initializing".to_owned()),
-        wg_peers: Err("initializing".to_owned()),
+        sessions: None,
+        wg_peers: None,
         last_state_update: UNIX_EPOCH,
         connected: true,
     };
@@ -123,14 +123,14 @@ fn thread_main(mut stream: TcpStream, hub_state: &HubStateMutex) -> Result<()> {
             match response {
                 Response::KeepAlive => {}  // don't care
                 Response::Connect(_) => {} // should not occur
-                Response::NodeState(sessions, wg_peers) => {
+                Response::NodeState(node_state) => {
                     let mut guard = hub_state.lock().unwrap();
                     let (_, ref mut nodes) = *guard;
                     if let Some(index) = nodes.iter().position(|(node, _)| node.serial == serial) {
                         // update node state
                         let node = &mut nodes[index].0;
-                        node.sessions = sessions;
-                        node.wg_peers = wg_peers;
+                        node.sessions = node_state.sessions;
+                        node.wg_peers = node_state.wg_peers;
                         node.last_state_update = SystemTime::now();
                     } else {
                         // for whatever reason, the node got removed from `hub_state`

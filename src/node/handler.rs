@@ -25,8 +25,7 @@ pub fn handle_command(
 ) -> Result<()> {
     match command {
         Command::NodeState => {
-            let (sessions, wg_peers) = node_state;
-            stream.write(&Response::NodeState(sessions.clone(), wg_peers.clone()))?;
+            stream.write(&Response::NodeState(node_state.clone()))?;
         }
         Command::Service(mode, now, services) => {
             let mode = match mode {
@@ -71,18 +70,18 @@ pub fn handle_command(
 /// If some update is made, returns `true`; otherwise, `false`.
 pub fn update_node_state(node_config: NodeConfig, node_state: &mut NodeState) -> bool {
     let sessions = if node_config.enable_sessions {
-        get_sessions()
+        Some(get_sessions())
     } else {
-        Err("not monitored".to_owned())
+        None
     };
 
     let wg_peers = if node_config.enable_wg_peers {
-        get_wg_peers()
+        Some(get_wg_peers())
     } else {
-        Err("not monitored".to_owned())
+        None
     };
 
-    let new_node_state = (sessions, wg_peers);
+    let new_node_state = NodeState { sessions, wg_peers };
     if *node_state != new_node_state {
         *node_state = new_node_state;
         true

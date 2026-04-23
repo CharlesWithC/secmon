@@ -14,7 +14,16 @@ pub fn handle_result(result: ClientResponse) -> Result<()> {
                     println!("");
                 }
 
-                println!("{}: {}", "node".green().bold(), node.hostname.green());
+                println!(
+                    "{}: {} ({})",
+                    "node".green().bold(),
+                    node.hostname.green(),
+                    if node.connected {
+                        "connected".green()
+                    } else {
+                        "disconnected".red()
+                    }
+                );
                 println!("  {}: {}", "address".bold(), node.address);
                 let last_state_update_dt: DateTime<Local> = node.last_state_update.into();
                 println!(
@@ -22,52 +31,59 @@ pub fn handle_result(result: ClientResponse) -> Result<()> {
                     "last state update".bold(),
                     last_state_update_dt.format("%F %T")
                 );
-                println!(
-                    "  {}? {}",
-                    "connected".bold(),
-                    if node.connected {
-                        "yes".green()
-                    } else {
-                        "no".red()
-                    }
-                );
 
-                match &node.sessions {
-                    Ok(sessions) => sessions.into_iter().for_each(|session| {
-                        println!("");
-                        println!("{}: {}", "session".yellow().bold(), session.user);
-                        if let Some(from) = &session.from {
-                            println!("  {}: {}", "from".bold(), from);
+                if let Some(sessions) = &node.sessions {
+                    println!("");
+                    println!("{}:", "sessions".yellow().bold());
+                    match sessions {
+                        Ok(sessions) => {
+                            let max_user_len = sessions
+                                .into_iter()
+                                .map(|session| session.user.len())
+                                .max()
+                                .unwrap_or(0);
+                            sessions.into_iter().for_each(|session| {
+                                let dt: DateTime<Local> = session.login.into();
+                                let from = if let Some(from) = &session.from {
+                                    format!("({from})")
+                                } else {
+                                    format!("(/)")
+                                };
+                                println!(
+                                    "  {user: <user_width$}{login: <7}{from}",
+                                    user = session.user,
+                                    user_width = max_user_len + 2,
+                                    login = dt.format("%H:%M"),
+                                    from = from
+                                );
+                            })
                         }
-
-                        let dt: DateTime<Local> = session.login.into();
-                        let parsed: String = format!("{}", dt.format("%F %T"));
-                        println!("  {}: {}", "login".bold(), parsed);
-                    }),
-                    Err(e) => {
-                        println!("");
-                        println!("{}: {}", "sessions".yellow().bold(), e);
+                        Err(e) => {
+                            println!("  {}: {}", "error".bold(), e);
+                        }
                     }
                 }
 
-                match &node.wg_peers {
-                    Ok(wg_peers) => wg_peers.into_iter().for_each(|wg_peer| {
-                        println!("");
-                        println!("{}: {}", "wg peer".yellow().bold(), wg_peer.peer);
-                        println!("  {}: {}", "interface".bold(), wg_peer.interface);
-                        if let Some(endpoint) = &wg_peer.endpoint {
-                            println!("  {}: {}", "endpoint".bold(), endpoint);
-                        }
-                        if let Some(latest_handshake) = &wg_peer.latest_handshake {
-                            let dt: DateTime<Local> = (*latest_handshake).into();
-                            let parsed = format!("{}", dt.format("%F %T"));
+                if let Some(wg_peers) = &node.wg_peers {
+                    match wg_peers {
+                        Ok(wg_peers) => wg_peers.into_iter().for_each(|wg_peer| {
+                            println!("");
+                            println!("{}: {}", "wg peer".yellow().bold(), wg_peer.peer);
+                            println!("  {}: {}", "interface".bold(), wg_peer.interface);
+                            if let Some(endpoint) = &wg_peer.endpoint {
+                                println!("  {}: {}", "endpoint".bold(), endpoint);
+                            }
+                            if let Some(latest_handshake) = &wg_peer.latest_handshake {
+                                let dt: DateTime<Local> = (*latest_handshake).into();
+                                let parsed = format!("{}", dt.format("%F %T"));
 
-                            println!("  {}: {}", "latest handshake".bold(), parsed);
+                                println!("  {}: {}", "latest handshake".bold(), parsed);
+                            }
+                        }),
+                        Err(e) => {
+                            println!("");
+                            println!("{}: {}", "wg peers".yellow().bold(), e);
                         }
-                    }),
-                    Err(e) => {
-                        println!("");
-                        println!("{}: {}", "wg peers".yellow().bold(), e);
                     }
                 }
             }

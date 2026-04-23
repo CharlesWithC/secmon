@@ -3,12 +3,12 @@ use std::process::Command;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::exec::Exec;
-use crate::models::nodestate::{Session, SessionsResult, WgPeer, WgPeersResult};
+use crate::models::nodestate::{Session, Sessions, WgPeer, WgPeers};
 
 /// Executes `who -w` and returns parsed result.
 ///
 /// If an error occurs, returns a string-based error.
-pub fn get_sessions() -> SessionsResult {
+pub fn get_sessions() -> Sessions {
     let mut command = Command::new("who");
     command.args(["-w"]).env("LC_ALL", "C.UTF-8");
     let output = command.run()?;
@@ -52,7 +52,7 @@ pub fn get_sessions() -> SessionsResult {
 /// Executes `wg` twice and returns parsed result.
 ///
 /// If an error occurs, returns a string-based error.
-pub fn get_wg_peers() -> WgPeersResult {
+pub fn get_wg_peers() -> WgPeers {
     // `wg show` only supports one attribute in each run
     // the output format is (interface, peer, <attribute>)
     // thus, we run `wg show` twice with different arguments

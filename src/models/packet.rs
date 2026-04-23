@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-use crate::models::nodestate::{SessionsResult, WgPeersResult};
+use crate::models::nodestate::NodeState;
 
 #[derive(Serialize, Deserialize)]
 /// Whether to enable or disable a service
@@ -72,7 +72,7 @@ pub enum Response {
     Connect(Hostname),
 
     /// Node state of Session and WgPeer
-    NodeState(SessionsResult, WgPeersResult),
+    NodeState(NodeState),
 
     /// Generic result of a command
     Result(Success, Message),
@@ -87,12 +87,7 @@ impl fmt::Display for Response {
         match self {
             Response::KeepAlive => write!(f, "Response::KeepAlive"),
             Response::Connect(hostname) => write!(f, "Response::Connect(hostname=\"{hostname}\")"),
-            Response::NodeState(sessions, wg_peers) => write!(
-                f,
-                "Response::NodeState(sessions[{}], wg_peers[{}])",
-                sessions.as_ref().map(|v| v.len() as isize).unwrap_or(-1),
-                wg_peers.as_ref().map(|v| v.len() as isize).unwrap_or(-1),
-            ),
+            Response::NodeState(node_state) => write!(f, "Response::{node_state}",),
             Response::Result(success, message) => write!(
                 f,
                 "Response::Result(success={success}, message=\"{message}\")"
