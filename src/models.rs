@@ -43,8 +43,8 @@ impl fmt::Display for LaunchArgs {
     }
 }
 
-#[derive(Clone, Copy)]
 /// Node configuration
+#[derive(Clone, Copy)]
 pub struct NodeConfig {
     pub reconnect: bool,
     pub enable_sessions: bool,

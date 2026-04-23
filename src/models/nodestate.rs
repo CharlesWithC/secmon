@@ -51,8 +51,8 @@ impl fmt::Display for NodeStateDiff {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 /// User session collected by node
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
 pub struct Session {
     /// Name of user relevant to the session
     pub user: String,
@@ -80,8 +80,8 @@ impl fmt::Display for Session {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq)]
 /// WireGuard peer collected by node
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
 pub struct WgPeer {
     /// WireGuard interface
     pub interface: String,

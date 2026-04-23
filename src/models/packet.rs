@@ -3,8 +3,8 @@ use std::fmt;
 
 use crate::models::nodestate::{NodeState, NodeStateDiff};
 
-#[derive(Serialize, Deserialize)]
 /// Whether to enable or disable a service
+#[derive(Serialize, Deserialize)]
 pub enum ServiceMode {
     Enable,
     Disable,
@@ -19,8 +19,8 @@ impl fmt::Display for ServiceMode {
     }
 }
 
-#[derive(Serialize, Deserialize)]
 /// Command sent from hub to node
+#[derive(Serialize, Deserialize)]
 pub enum Command {
     /// Request current node state
     NodeState,
@@ -60,8 +60,8 @@ impl fmt::Display for Command {
     }
 }
 
-#[derive(Serialize, Deserialize)]
 /// Response sent from node to hub
+#[derive(Serialize, Deserialize)]
 pub enum Response {
     /// `KeepAlive` acknowledgement
     KeepAlive,
