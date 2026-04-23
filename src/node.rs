@@ -103,8 +103,8 @@ pub fn main(ip: IpAddr, port: u16, node_config: NodeConfig) -> Result<()> {
                 });
             }
 
-            // main worker that handles stream read and hub commands
-            // note: `sw_s` is moved here; this is the only stream "reading" function
+            // main function that handles stream read and hub commands
+            // note: `stream` and `sw_s` are moved here; this is the only stream "reading" function
             // note: this is a blocking function that terminates on stream close
             let result = move || -> Result<()> {
                 loop {

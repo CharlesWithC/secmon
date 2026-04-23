@@ -1,5 +1,5 @@
-use anyhow::Result;
-use crossbeam_channel::{Receiver, Sender, TryRecvError, unbounded};
+use anyhow::{Result, anyhow};
+use crossbeam_channel::{Receiver, unbounded};
 use std::net::SocketAddr;
 use std::net::{TcpListener, TcpStream};
 use std::sync::Arc;
@@ -8,14 +8,14 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::models::hub::{ChannelPacket, HubStateMutex};
 use crate::models::node::Node;
-use crate::models::nodestate::NodeStateError;
+use crate::models::nodestate::{NodeStateDiff, NodeStateError};
 use crate::models::packet::Response;
 use crate::models::{ASSUME_HOSTNAME_UNIQUE, DISCONNECT_GRACE_PERIOD};
 use crate::traits::iosered::IOSerialized;
 
 /// Initializes node connection.
 ///
-/// Returns `serial` of the node and `receiver` for internal channel packets.
+/// Returns `serial` of the node and `receiver` for local commands.
 fn handle_new_node(
     address: &SocketAddr,
     hostname: &String,
@@ -60,18 +60,67 @@ fn handle_new_node(
     (*counter, r)
 }
 
+/// Updates hub state with node state difference.
+///
+/// Note: Full node state is not used to update hub state.
+///
+/// Returns new serial and command receiver if node cannot be recognized.
+fn update_hub_state(
+    serial: u32,
+    address: &SocketAddr,
+    hostname: &String,
+    diff: NodeStateDiff,
+    hub_state: &HubStateMutex,
+) -> Option<(u32, Receiver<ChannelPacket>)> {
+    let mut guard = hub_state.lock().unwrap();
+    let (_, ref mut nodes) = *guard;
+    if let Some(index) = nodes.iter().position(|(node, _)| node.serial == serial) {
+        macro_rules! update_node_diff {
+                ( $node:expr, $diff:expr, [$( $attr:ident ),*] ) => {
+                    $(if let Some($attr) = diff.$attr {
+                        $node.$attr = $attr;
+                    })*
+                }
+        }
+
+        let node = &mut nodes[index].0;
+        update_node_diff!(node, diff, [sessions, wg_peers]);
+        node.last_state_update = SystemTime::now();
+
+        None
+    } else {
+        eprintln!("{address} ({hostname}) is not a recognized node");
+        Some(handle_new_node(address, hostname, hub_state))
+    }
+}
+
+/// Handles closed stream gracefully by dropping local command sender.
+///
+/// When local command sender is dropped, the thread handling local commands
+/// would error and terminate.
+fn handle_stream_close(serial: u32, hub_state: &HubStateMutex) -> () {
+    let mut guard = hub_state.lock().unwrap();
+    let (_, ref mut nodes) = *guard;
+    if let Some(index) = nodes.iter().position(|(node, _)| node.serial == serial) {
+        // create a dummy new channel, and replace original sender to drop it
+        let (s, _) = unbounded::<ChannelPacket>();
+        nodes[index].1 = s;
+    }
+    // note: it's fine if we cannot find the node - that tells the old receiver is already dropped
+}
+
 /// Main thread function for remote node connection.
 ///
 /// This is a blocking function and does not exit unless interrupted.
 fn thread_main(mut stream: TcpStream, hub_state: &HubStateMutex) -> Result<()> {
-    let mut serial;
-    let mut receiver;
+    let serial;
+    let cmd_receiver;
     let address = stream.peer_addr().unwrap();
     let hostname;
 
     if let Response::Connect(_hostname) = stream.read::<Response>()? {
         hostname = _hostname;
-        (serial, receiver) = handle_new_node(&address, &hostname, hub_state);
+        (serial, cmd_receiver) = handle_new_node(&address, &hostname, hub_state);
         println!("{address} ({hostname}) connected and was assigned serial {serial}");
     } else {
         return Err(anyhow::anyhow!(
@@ -79,101 +128,66 @@ fn thread_main(mut stream: TcpStream, hub_state: &HubStateMutex) -> Result<()> {
         ));
     }
 
-    // use read-timeout stream, and non-blocking channel
-    // reason: we prioritize node state update over local commands
-    stream.set_read_timeout(Some(Duration::from_millis(100)))?;
+    thread::scope(|s| {
+        // sender & receiver for stream reader (`sr`)
+        // everything received by stream would be either handled locally or sent to `sr_s`
+        // command handler should use `sr_r` to receive command responses
+        let (sr_s, sr_r) = unbounded::<Response>();
 
-    // send the next non-`KeepAlive` non-`NodeState` `Response` here
-    let mut respond_command_response_to: Option<Sender<Response>> = None;
+        {
+            // thread that handles local commands
+            // note: `sr_r` is moved here; this is the only stream "writing" thread
+            // note: `terminate` is not needed (and cannot be used, since we have a blocking `recv`)
+            //       we drop the `cmd_sender` when connection closes, which makes `cmd_receiver` error,
+            //       and then the thread would terminate for free
+            let mut sw: TcpStream = stream
+                .try_clone()
+                .map_err(|e| anyhow!("Unable to clone stream: {e}"))?;
 
-    loop {
-        // only handle new local command when last command is handled
-        // note that, commands are sent serially, and responds are received serially,
-        // and so there is no risk of race condition / mismatch of command and response
-        if let None = respond_command_response_to {
-            // peek for a local command, do not block
-            let mut chanpkt_opt: Option<ChannelPacket> = None;
-            match receiver.try_recv() {
-                Ok(chanpkt) => chanpkt_opt = Some(chanpkt),
-                Err(TryRecvError::Empty) => {}
-                Err(e) => Err(e)?,
-            }
-
-            if let Some((command, sender)) = chanpkt_opt {
-                stream.write(&command)?;
-                respond_command_response_to = Some(sender);
-            }
+            s.spawn(move || -> Result<()> {
+                loop {
+                    // note: it is safe to receive a response with a blocking `recv`
+                    // because we send the commands in serial order, and the node would
+                    // only respond in matching serial order
+                    // that said, we won't receive a response that doesn't match command
+                    let (command, resp_sender) = cmd_receiver.recv()?;
+                    sw.write(&command)?;
+                    let response = sr_r.recv()?;
+                    resp_sender.send(response)?;
+                }
+            });
         }
 
-        // try to receive a response from node with read timeout
-        // if it's a NodeState, then we happily accept it and update `hub_state`
-        // if it's some other response, then we send it back to the original command sender through channel
-        let mut response_opt = None;
-        let mut _buf = [0u8; 4];
-        match stream.read::<Response>() {
-            // note: stream.read blocks until timeout
-            Ok(response) => response_opt = Some(response),
-            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
-            Err(e) => Err(e)?,
-        };
+        // main function that handles stream read
+        // note: `stream` and `sr_s` are moved here; this is the only stream "reading" function
+        // note: this is a blocking function that terminates on stream close
+        let result = move || -> Result<()> {
+            loop {
+                let response = stream.read::<Response>()?;
+                println!("{address} ({hostname}) responded {response}");
 
-        if let Some(response) = response_opt {
-            // there is some response
-            println!("{address} ({hostname}) responded {response}");
-
-            match response {
-                Response::KeepAlive => {}  // don't care
-                Response::Connect(_) => {} // should not occur
-                Response::NodeState(node_state) => {
-                    let mut guard = hub_state.lock().unwrap();
-                    let (_, ref mut nodes) = *guard;
-                    if let Some(index) = nodes.iter().position(|(node, _)| node.serial == serial) {
-                        macro_rules! update_node {
-                            ( $node:expr, $updated:expr, [$( $attr:ident ),*] ) => {
-                                $($node.$attr = $updated.$attr;)*
-                            }
-                        }
-
-                        let node = &mut nodes[index].0;
-                        update_node!(node, node_state, [sessions, wg_peers]);
-                        node.last_state_update = SystemTime::now();
-                    } else {
-                        // for whatever reason, the node got removed from `hub_state`
-                        // note: this should NOT occur but we handle it gracefully here by reinitializing the node
-                        eprintln!("{address} ({hostname}) is not a recognized node");
-                        (serial, receiver) = handle_new_node(&address, &hostname, hub_state);
+                match response {
+                    Response::KeepAlive => {}  // don't care
+                    Response::Connect(_) => {} // should not occur
+                    Response::NodeStateDiff(diff) => {
+                        // use diff to update hub state
+                        // diff is never requested by a command
+                        update_hub_state(serial, &address, &hostname, diff, &hub_state);
                     }
-                }
-                Response::NodeStateDiff(diff) => {
-                    let mut guard = hub_state.lock().unwrap();
-                    let (_, ref mut nodes) = *guard;
-                    if let Some(index) = nodes.iter().position(|(node, _)| node.serial == serial) {
-                        macro_rules! update_node_diff {
-                            ( $node:expr, $diff:expr, [$( $attr:ident ),*] ) => {
-                                $(if let Some($attr) = diff.$attr {
-                                    $node.$attr = $attr;
-                                })*
-                            }
-                        }
-
-                        let node = &mut nodes[index].0;
-                        update_node_diff!(node, diff, [sessions, wg_peers]);
-                        node.last_state_update = SystemTime::now();
-                    } else {
-                        eprintln!("{address} ({hostname}) is not a recognized node");
-                        (serial, receiver) = handle_new_node(&address, &hostname, hub_state);
-                    }
-                }
-                response @ _ => {
-                    // other response, send to original command sender through channel
-                    if let Some(sender) = respond_command_response_to {
-                        sender.send(response)?;
-                        respond_command_response_to = None; // clear sender to accept next command
+                    response @ _ => {
+                        // other response, including full node state
+                        // send to command handler on a blocking `sr_r.recv()`
+                        sr_s.send(response)?;
                     }
                 }
             }
-        }
-    }
+        }();
+
+        // close the stream to drop `cmd_sender` to terminate the command handling thread
+        handle_stream_close(serial, &hub_state);
+
+        result
+    })
 }
 
 /// Main function for handling incoming remote node connnections.

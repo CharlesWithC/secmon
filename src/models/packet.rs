@@ -71,10 +71,21 @@ pub enum Response {
     /// This response is only sent once on connection establishment
     Connect(Hostname),
 
-    /// Full node state of Session and WgPeer
+    /// Full node state
+    /// 
+    /// Note: This should only be requested by a `Command`.
+    /// 
+    /// The full node state is not used to update hub state,
+    /// as hub state solely relies on diff rather than full state.
     NodeState(NodeState),
 
     /// Difference of node state compared with last update
+    /// 
+    /// Note: This cannot be requested by a `Command` because
+    /// node sends diff updates automatically.
+    /// 
+    /// That said, when handling `Response`, `NodeStateDiff` can be safely
+    /// ignored, in terms of relaying `Response` to command handler.
     NodeStateDiff(NodeStateDiff),
 
     /// Generic result of a command
