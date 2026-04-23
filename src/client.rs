@@ -12,16 +12,59 @@ mod handler;
 /// returns `Node` if found; otherwise, raises an error.
 fn find_node(stream: &mut UnixStream, node: String) -> Result<Node> {
     stream.write(&ClientCommand::FindNode((*node).to_owned()))?;
-    let node_res = stream.read::<ClientResponse>()?;
-    match node_res {
+    let resp = stream.read::<ClientResponse>()?;
+    match resp {
         ClientResponse::Failure(error) => Err(anyhow!("Failure: {error}")),
         ClientResponse::Node(node) => Ok(node),
         _ => {
-            return Err(anyhow!(
-                "Hub daemon provided an invalid response: {node_res}"
-            ));
+            return Err(anyhow!("Hub daemon provided an invalid response: {resp}"));
         }
     }
+}
+
+/// Executes command on given nodes and handles response.
+///
+/// Closes connection with hub once done.
+fn exec_node_cmd(stream: &mut UnixStream, node: &str, command: Command) -> Result<()> {
+    if node == "-" {
+        // send command to all connected nodes
+        stream.write(&ClientCommand::List)?;
+        let resp = stream.read::<ClientResponse>()?;
+        match resp {
+            ClientResponse::List(nodes) => {
+                let mut is_first = true;
+                for node in nodes {
+                    if node.connected {
+                        if !is_first {
+                            println!("");
+                        }
+                        is_first = false;
+
+                        println!("{} ({}) responded:", node.address, node.hostname);
+
+                        stream.write(&ClientCommand::RawCommand(node.serial, command.clone()))?;
+
+                        let result = stream.read::<ClientResponse>()?;
+                        handler::handle_result(result)?;
+                    }
+                }
+            }
+            _ => {
+                return Err(anyhow!("Hub daemon provided an invalid response: {resp}"));
+            }
+        }
+    } else {
+        // send command to a specific node
+        let node = find_node(stream, node.to_owned())?;
+        stream.write(&ClientCommand::RawCommand(node.serial, command))?;
+
+        let result = stream.read::<ClientResponse>()?;
+        handler::handle_result(result)?;
+    }
+
+    stream.write(&ClientCommand::Quit)?;
+
+    Ok(())
 }
 
 /// Client main function for handling local client command.
@@ -65,15 +108,11 @@ pub fn main(socket_path: String, command: String) -> Result<()> {
                 return Err(anyhow!("At least one service must be specified"));
             }
 
-            let node = find_node(&mut stream, (*node).to_owned())?;
-            stream.write(&ClientCommand::RawCommand(
-                node.serial,
+            exec_node_cmd(
+                &mut stream,
+                *node,
                 Command::Service(mode, flag_now, services),
-            ))?;
-
-            let result = stream.read::<ClientResponse>()?;
-            stream.write(&ClientCommand::Quit)?;
-            handler::handle_result(result)?;
+            )?;
         }
         [node, "reboot", args @ ..] => {
             let minutes = args
@@ -85,26 +124,10 @@ pub fn main(socket_path: String, command: String) -> Result<()> {
                 })
                 .ok_or(anyhow!("\"+<minutes>\" must be provided"))??;
 
-            let node = find_node(&mut stream, (*node).to_owned())?;
-            stream.write(&ClientCommand::RawCommand(
-                node.serial,
-                Command::Reboot(minutes),
-            ))?;
-
-            let result = stream.read::<ClientResponse>()?;
-            stream.write(&ClientCommand::Quit)?;
-            handler::handle_result(result)?;
+            exec_node_cmd(&mut stream, *node, Command::Reboot(minutes))?;
         }
         [node, "shutdown-cancel"] => {
-            let node = find_node(&mut stream, (*node).to_owned())?;
-            stream.write(&ClientCommand::RawCommand(
-                node.serial,
-                Command::ShutdownCancel,
-            ))?;
-
-            let result = stream.read::<ClientResponse>()?;
-            stream.write(&ClientCommand::Quit)?;
-            handler::handle_result(result)?;
+            exec_node_cmd(&mut stream, *node, Command::ShutdownCancel)?;
         }
         _ => Err(anyhow!("Invalid command; Use 'secmon help' for help"))?,
     }

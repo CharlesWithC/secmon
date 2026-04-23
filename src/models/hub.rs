@@ -24,7 +24,7 @@ pub type HubState = (u32, HubNodes); // (counter, nodes)
 pub type HubStateMutex = Arc<Mutex<HubState>>;
 
 /// Command sent from end-user client to hub
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub enum ClientCommand {
     /// List all connected nodes
     List,
@@ -63,7 +63,7 @@ impl fmt::Display for ClientCommand {
 }
 
 /// Result of executing an end-user client command
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub enum ClientResponse {
     /// A list of all connected nodes
     List(Vec<Node>),

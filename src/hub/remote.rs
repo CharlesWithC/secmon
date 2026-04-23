@@ -75,7 +75,7 @@ fn update_hub_state(
     let mut guard = hub_state.lock().unwrap();
     let (_, ref mut nodes) = *guard;
     if let Some(index) = nodes.iter().position(|(node, _)| node.serial == serial) {
-        macro_rules! update_node_diff {
+        macro_rules! update_node {
             ( $node:expr, $diff:expr, [$( $attr:ident ),*] ) => {
                 $(if let Some($attr) = diff.$attr {
                     $node.$attr = $attr;
@@ -84,7 +84,7 @@ fn update_hub_state(
         }
 
         let node = &mut nodes[index].0;
-        update_node_diff!(node, diff, [sessions, wg_peers]);
+        update_node!(node, diff, [sessions, wg_peers]);
         node.last_state_update = SystemTime::now();
 
         None

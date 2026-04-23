@@ -1,6 +1,6 @@
 # SecMon
 
-A std-only tokio-free security tool for monitoring various resources on multiple servers.
+A std-only high-performance security tool for monitoring various resources on multiple servers.
 
 `hub` is the central server that receives data from `node` and sends commands to `node`.
 

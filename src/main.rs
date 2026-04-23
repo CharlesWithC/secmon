@@ -26,6 +26,8 @@ Client commands:
   secmon <node> reboot +<minutes>   reboot server in X minutes
   secmon <node> shutdown-cancel     cancel shutdown
 
+  <node> can be IP or hostname of the node, or \"-\" for all connected nodes.
+
 Environment:
   HOST=<host> PORT=<port> secmon hub
   HUB_IP=<ip> HUB_PORT=<port> secmon node";

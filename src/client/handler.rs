@@ -98,13 +98,13 @@ pub fn handle_result(result: ClientResponse) -> Result<()> {
                 Response::Result(success, message) => {
                     if success {
                         if message == "" {
-                            println!("Command succeeded with no message");
+                            println!("Success (no message)");
                         } else {
                             println!("{message}");
                         }
                     } else {
                         if message == "" {
-                            eprintln!("Command failed with no message");
+                            eprintln!("Error (no message)");
                         } else {
                             eprintln!("{message}");
                         }
