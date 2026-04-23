@@ -2,7 +2,7 @@ use anyhow::{Result, anyhow};
 use std::fs;
 use std::{env, process};
 
-mod cli;
+mod client;
 mod exec;
 mod hub;
 mod iosered;
@@ -19,7 +19,7 @@ const USAGE: &str = "Usage:
     [--reconnect]
   secmon help                       print this help message
 
-Hub control commands:
+Client commands:
   secmon list                       list all connected nodes
   secmon <node> service             enable/disable some systemctl services
     <enable|disable> [--now]
@@ -69,7 +69,7 @@ fn launch(launch_args: LaunchArgs) -> Result<()> {
                 ));
             }
 
-            crate::cli::main(socket_path, command)?;
+            crate::client::main(socket_path, command)?;
         }
     }
 

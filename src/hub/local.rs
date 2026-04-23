@@ -5,20 +5,20 @@ use std::sync::Arc;
 use std::thread;
 
 use crate::iosered::IOSerialized;
-use crate::models::hub::{CtrlCmd, CtrlRes, HubStateMutex};
+use crate::models::hub::{ClientCommand, ClientResponse, HubStateMutex};
 use crate::models::packet::Response;
 
-/// Handles local cli command.
+/// Handles local client command.
 ///
 /// Returns the result of executing the command.
-fn handle_command(command: CtrlCmd, hub_state: &HubStateMutex) -> CtrlRes {
+fn handle_command(command: ClientCommand, hub_state: &HubStateMutex) -> ClientResponse {
     match command {
-        CtrlCmd::List => {
+        ClientCommand::List => {
             let guard = hub_state.lock().unwrap();
             let (_, ref nodes) = *guard;
-            CtrlRes::List(nodes.into_iter().map(|(node, _)| node.clone()).collect())
+            ClientResponse::List(nodes.into_iter().map(|(node, _)| node.clone()).collect())
         }
-        CtrlCmd::FindNode(query) => {
+        ClientCommand::FindNode(query) => {
             let guard = hub_state.lock().unwrap();
             let (_, ref nodes) = *guard;
 
@@ -29,41 +29,41 @@ fn handle_command(command: CtrlCmd, hub_state: &HubStateMutex) -> CtrlRes {
                     node.hostname == query
                         || node.address.to_string().split(":").next() == Some(&query)
                 })
-                .map(|(node, _)| CtrlRes::Node(node.clone()))
-                .unwrap_or(CtrlRes::Failure(format!(
+                .map(|(node, _)| ClientResponse::Node(node.clone()))
+                .unwrap_or(ClientResponse::Failure(format!(
                     "unable to identify node with '{query}'"
                 )))
         }
-        CtrlCmd::RawCommand(serial, command) => {
+        ClientCommand::RawCommand(serial, command) => {
             let guard = hub_state.lock().unwrap();
             let (_, ref nodes) = *guard;
 
             if let Some((_, sender)) = nodes.iter().find(|(node, _)| node.serial == serial) {
                 let (resp_s, resp_r) = unbounded::<Response>();
                 if let Err(e) = sender.send((command, resp_s)) {
-                    return CtrlRes::Failure(format!("{e}"));
+                    return ClientResponse::Failure(format!("{e}"));
                 }
                 let resp_res = resp_r.recv();
                 match resp_res {
-                    Ok(resp) => CtrlRes::RawResponse(resp),
-                    Err(e) => CtrlRes::Failure(format!("{e}")),
+                    Ok(resp) => ClientResponse::RawResponse(resp),
+                    Err(e) => ClientResponse::Failure(format!("{e}")),
                 }
             } else {
-                CtrlRes::Failure(format!("SERIAL={serial} is not a recognized node"))
+                ClientResponse::Failure(format!("SERIAL={serial} is not a recognized node"))
             }
         }
-        CtrlCmd::Quit => panic!("`CtrlCmd::Quit` should not be handled by `handle_command`"),
+        ClientCommand::Quit => panic!("`CtrlCmd::Quit` should not be handled by `handle_command`"),
     }
 }
 
-/// Main thread function for local cli connection.
+/// Main thread function for local client connection.
 ///
 /// This is a blocking function and does not exit unless interrupted.
 fn thread_main(mut stream: UnixStream, hub_state: HubStateMutex) -> Result<()> {
     loop {
-        let command = stream.read::<CtrlCmd>()?;
+        let command = stream.read::<ClientCommand>()?;
         println!("Received {command}");
-        if let CtrlCmd::Quit = command {
+        if let ClientCommand::Quit = command {
             return Ok(());
         }
 
@@ -72,7 +72,7 @@ fn thread_main(mut stream: UnixStream, hub_state: HubStateMutex) -> Result<()> {
     }
 }
 
-/// Main function for handling incoming local cli connections.
+/// Main function for handling incoming local client connections.
 ///
 /// This is a blocking function and does not exit unless interrupted.
 pub fn main(listener: UnixListener, hub_state: HubStateMutex) -> () {

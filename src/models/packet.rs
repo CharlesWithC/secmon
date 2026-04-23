@@ -4,7 +4,7 @@ use std::fmt;
 use crate::models::nodestate::{SessionsResult, WgPeersResult};
 
 #[derive(Serialize, Deserialize)]
-/// Represents whether to enable or disable a service.
+/// Whether to enable or disable a service
 pub enum ServiceMode {
     Enable,
     Disable,
@@ -20,7 +20,7 @@ impl fmt::Display for ServiceMode {
 }
 
 #[derive(Serialize, Deserialize)]
-/// Reprents a Command sent from hub to node.
+/// Command sent from hub to node
 pub enum Command {
     /// Request current node state
     NodeState,
@@ -61,7 +61,7 @@ impl fmt::Display for Command {
 }
 
 #[derive(Serialize, Deserialize)]
-/// Represents a Response sent from node to hub.
+/// Response sent from node to hub
 pub enum Response {
     /// `KeepAlive` acknowledgement
     KeepAlive,

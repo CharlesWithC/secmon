@@ -3,12 +3,12 @@ use chrono::DateTime;
 use chrono::offset::Local;
 use colored::Colorize;
 
-use crate::models::hub::CtrlRes;
+use crate::models::hub::ClientResponse;
 use crate::models::packet::Response;
 
-pub fn handle_result(result: CtrlRes) -> Result<()> {
+pub fn handle_result(result: ClientResponse) -> Result<()> {
     match result {
-        CtrlRes::List(nodes) => {
+        ClientResponse::List(nodes) => {
             for (i, node) in nodes.iter().enumerate() {
                 if i != 0 {
                     println!("");
@@ -73,7 +73,7 @@ pub fn handle_result(result: CtrlRes) -> Result<()> {
             }
             Ok(())
         }
-        CtrlRes::RawResponse(response) => {
+        ClientResponse::RawResponse(response) => {
             match response {
                 Response::Result(success, message) => {
                     if success {
@@ -96,7 +96,7 @@ pub fn handle_result(result: CtrlRes) -> Result<()> {
             }
             Ok(())
         }
-        CtrlRes::Failure(error) => Err(anyhow!("Failure: {error}")),
+        ClientResponse::Failure(error) => Err(anyhow!("Failure: {error}")),
         _ => Err(anyhow!("Received invalid response from hub: {result}")),
     }
 }

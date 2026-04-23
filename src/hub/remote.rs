@@ -49,7 +49,7 @@ fn handle_new_node(
         connected: true,
     };
 
-    // create channels for cli <=> node communication
+    // create channels for client <=> node communication
     let (s, r) = unbounded::<ChannelPacket>();
 
     // add node and sender for commands to vector

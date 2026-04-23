@@ -11,7 +11,7 @@ pub mod packet;
 pub const DEFAULT_HOST: IpAddr = IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0));
 /// Default port for hub and node
 pub const DEFAULT_PORT: u16 = 9992;
-/// Default socket directory for hub <=> cli
+/// Default socket directory for hub <=> client
 pub const DEFAULT_SOCKET_DIR: &str = "/var/run/secmon";
 
 /// Grace period in seconds before removing a disconnected node

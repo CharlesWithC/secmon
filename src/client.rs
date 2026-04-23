@@ -2,7 +2,7 @@ use anyhow::{Result, anyhow};
 use std::os::unix::net::UnixStream;
 
 use crate::iosered::IOSerialized;
-use crate::models::hub::{CtrlCmd, CtrlRes};
+use crate::models::hub::{ClientCommand, ClientResponse};
 use crate::models::node::Node;
 use crate::models::packet::{Command, ServiceMode};
 
@@ -11,11 +11,11 @@ mod handler;
 /// Sends `FindNode` command to hub daemon,
 /// returns `Node` if found; otherwise, raises an error.
 fn find_node(stream: &mut UnixStream, node: String) -> Result<Node> {
-    stream.write(&CtrlCmd::FindNode((*node).to_owned()))?;
-    let node_res = stream.read::<CtrlRes>()?;
+    stream.write(&ClientCommand::FindNode((*node).to_owned()))?;
+    let node_res = stream.read::<ClientResponse>()?;
     match node_res {
-        CtrlRes::Failure(error) => Err(anyhow!("Failure: {error}")),
-        CtrlRes::Node(node) => Ok(node),
+        ClientResponse::Failure(error) => Err(anyhow!("Failure: {error}")),
+        ClientResponse::Node(node) => Ok(node),
         _ => {
             return Err(anyhow!(
                 "Hub daemon provided an invalid response: {node_res}"
@@ -24,7 +24,7 @@ fn find_node(stream: &mut UnixStream, node: String) -> Result<Node> {
     }
 }
 
-/// Control main function for handling local control command.
+/// Client main function for handling local client command.
 ///
 /// The command is read from command line arguments.
 ///
@@ -37,10 +37,10 @@ pub fn main(socket_path: String, command: String) -> Result<()> {
 
     match command.split_whitespace().collect::<Vec<_>>().as_slice() {
         ["list", ..] => {
-            stream.write(&CtrlCmd::List)?;
+            stream.write(&ClientCommand::List)?;
 
-            let result = stream.read::<CtrlRes>()?;
-            stream.write(&CtrlCmd::Quit)?;
+            let result = stream.read::<ClientResponse>()?;
+            stream.write(&ClientCommand::Quit)?;
             handler::handle_result(result)?;
         }
         [node, "service", mode @ ("enable" | "disable"), args @ ..] => {
@@ -66,13 +66,13 @@ pub fn main(socket_path: String, command: String) -> Result<()> {
             }
 
             let node = find_node(&mut stream, (*node).to_owned())?;
-            stream.write(&CtrlCmd::RawCommand(
+            stream.write(&ClientCommand::RawCommand(
                 node.serial,
                 Command::Service(mode, flag_now, services),
             ))?;
 
-            let result = stream.read::<CtrlRes>()?;
-            stream.write(&CtrlCmd::Quit)?;
+            let result = stream.read::<ClientResponse>()?;
+            stream.write(&ClientCommand::Quit)?;
             handler::handle_result(result)?;
         }
         [node, "reboot", args @ ..] => {
@@ -86,18 +86,18 @@ pub fn main(socket_path: String, command: String) -> Result<()> {
                 .ok_or(anyhow!("\"+<minutes>\" must be provided"))??;
 
             let node = find_node(&mut stream, (*node).to_owned())?;
-            stream.write(&CtrlCmd::RawCommand(node.serial, Command::Reboot(minutes)))?;
+            stream.write(&ClientCommand::RawCommand(node.serial, Command::Reboot(minutes)))?;
 
-            let result = stream.read::<CtrlRes>()?;
-            stream.write(&CtrlCmd::Quit)?;
+            let result = stream.read::<ClientResponse>()?;
+            stream.write(&ClientCommand::Quit)?;
             handler::handle_result(result)?;
         }
         [node, "shutdown-cancel"] => {
             let node = find_node(&mut stream, (*node).to_owned())?;
-            stream.write(&CtrlCmd::RawCommand(node.serial, Command::ShutdownCancel))?;
+            stream.write(&ClientCommand::RawCommand(node.serial, Command::ShutdownCancel))?;
 
-            let result = stream.read::<CtrlRes>()?;
-            stream.write(&CtrlCmd::Quit)?;
+            let result = stream.read::<ClientResponse>()?;
+            stream.write(&ClientCommand::Quit)?;
             handler::handle_result(result)?;
         }
         _ => Err(anyhow!("Invalid command; Use 'secmon help' for help"))?,

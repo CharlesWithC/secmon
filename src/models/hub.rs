@@ -23,9 +23,9 @@ pub type HubNodes = Vec<(Node, Sender<ChannelPacket>)>;
 pub type HubState = (u32, HubNodes); // (counter, nodes)
 pub type HubStateMutex = Arc<Mutex<HubState>>;
 
-/// Represents a command line control command.
+/// Command sent from end-user client to hub
 #[derive(Serialize, Deserialize)]
-pub enum CtrlCmd {
+pub enum ClientCommand {
     /// List all connected nodes
     List,
 
@@ -44,22 +44,22 @@ pub enum CtrlCmd {
 /// Serial number of a node
 pub type Serial = u32;
 
-impl fmt::Display for CtrlCmd {
+impl fmt::Display for ClientCommand {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            CtrlCmd::List => write!(f, "CtrlCmd::List"),
-            CtrlCmd::FindNode(query) => write!(f, "CtrlCmd::FindNode(query=\"{query}\")"),
-            CtrlCmd::RawCommand(serial, command) => {
-                write!(f, "CtrlCmd::RawCommand(serial={serial}, command={command})")
+            ClientCommand::List => write!(f, "ClientCommand::List"),
+            ClientCommand::FindNode(query) => write!(f, "ClientCommand::FindNode(query=\"{query}\")"),
+            ClientCommand::RawCommand(serial, command) => {
+                write!(f, "ClientCommand::RawCommand(serial={serial}, command={command})")
             }
-            CtrlCmd::Quit => write!(f, "CtrlCmd::Quit"),
+            ClientCommand::Quit => write!(f, "ClientCommand::Quit"),
         }
     }
 }
 
-/// Represnts the result of executing a control command.
+/// Result of executing an end-user client command
 #[derive(Serialize, Deserialize)]
-pub enum CtrlRes {
+pub enum ClientResponse {
     /// A list of all connected nodes
     List(Vec<Node>),
 
@@ -73,16 +73,16 @@ pub enum CtrlRes {
     Failure(ErrorMessage),
 }
 
-impl fmt::Display for CtrlRes {
+impl fmt::Display for ClientResponse {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            CtrlRes::List(nodes) => write!(f, "CtrlRes::List(nodes[{}])", nodes.len()),
-            CtrlRes::Node(node) => write!(f, "CtrlRes::Node(node={node})"),
-            CtrlRes::RawResponse(response) => {
-                write!(f, "CtrlRes::RawResponse(response={response})")
+            ClientResponse::List(nodes) => write!(f, "ClientResponse::List(nodes[{}])", nodes.len()),
+            ClientResponse::Node(node) => write!(f, "ClientResponse::Node(node={node})"),
+            ClientResponse::RawResponse(response) => {
+                write!(f, "ClientResponse::RawResponse(response={response})")
             }
-            CtrlRes::Failure(error) => {
-                write!(f, "CtrlRes::Failure(error=\"{error}\")")
+            ClientResponse::Failure(error) => {
+                write!(f, "ClientResponse::Failure(error=\"{error}\")")
             }
         }
     }
