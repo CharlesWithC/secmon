@@ -7,15 +7,38 @@ use std::time::SystemTime;
 
 use crate::utils::get_display_len;
 
-type ErrorMessage = String;
+/// Error info for an attribute of node state
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
+pub enum NodeStateError {
+    /// Hub has not received the first update from node
+    Initializing,
+
+    /// Node is not monitoring the specific attribute
+    NotMonitored,
+
+    /// Generic error message on collecting information
+    Message(String),
+}
+
+impl fmt::Display for NodeStateError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            NodeStateError::Initializing => write!(f, "NodeStateError::Initializing"),
+            NodeStateError::NotMonitored => write!(f, "NodeStateError::NotMonitored"),
+            NodeStateError::Message(message) => {
+                write!(f, "NodeStateError::Message(message=\"{message}\")")
+            }
+        }
+    }
+}
 
 /// Full state of a node
 ///
 /// A `None` attribute means that the attribute is not monitored.
 #[derive(Serialize, Deserialize, Clone, PartialEq)]
 pub struct NodeState {
-    pub sessions: SessionsOpt,
-    pub wg_peers: WgPeersOpt,
+    pub sessions: Sessions,
+    pub wg_peers: WgPeers,
 }
 
 impl fmt::Display for NodeState {
@@ -34,8 +57,8 @@ impl fmt::Display for NodeState {
 /// A `None` attribute means the attribute is not updated.
 #[derive(Serialize, Deserialize, Clone, PartialEq)]
 pub struct NodeStateDiff {
-    pub sessions: Option<SessionsOpt>,
-    pub wg_peers: Option<WgPeersOpt>,
+    pub sessions: Option<Sessions>,
+    pub wg_peers: Option<WgPeers>,
 }
 
 impl fmt::Display for NodeStateDiff {
@@ -62,8 +85,7 @@ pub struct Session {
     pub login: SystemTime,
 }
 
-pub type Sessions = Result<Vec<Session>, ErrorMessage>;
-pub type SessionsOpt = Option<Sessions>;
+pub type Sessions = Result<Vec<Session>, NodeStateError>;
 
 impl fmt::Display for Session {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -93,8 +115,7 @@ pub struct WgPeer {
     pub latest_handshake: Option<SystemTime>,
 }
 
-pub type WgPeers = Result<Vec<WgPeer>, ErrorMessage>;
-pub type WgPeersOpt = Option<WgPeers>;
+pub type WgPeers = Result<Vec<WgPeer>, NodeStateError>;
 
 impl fmt::Display for WgPeer {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

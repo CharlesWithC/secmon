@@ -5,7 +5,7 @@ use std::fmt;
 use std::net::SocketAddr;
 use std::time::SystemTime;
 
-use crate::models::nodestate::{SessionsOpt, WgPeersOpt};
+use crate::models::nodestate::{Sessions, WgPeers};
 use crate::utils::get_display_len;
 
 /// Instance of a node
@@ -20,9 +20,9 @@ pub struct Node {
     /// Hostname of node
     pub hostname: String,
     /// User sessions collected by node
-    pub sessions: SessionsOpt,
+    pub sessions: Sessions,
     /// WireGuard peers collected by node
-    pub wg_peers: WgPeersOpt,
+    pub wg_peers: WgPeers,
     /// Last state update received from node
     pub last_state_update: SystemTime,
     /// Whether node is connected

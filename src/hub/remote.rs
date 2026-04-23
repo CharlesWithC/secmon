@@ -8,6 +8,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::models::hub::{ChannelPacket, HubStateMutex};
 use crate::models::node::Node;
+use crate::models::nodestate::NodeStateError;
 use crate::models::packet::Response;
 use crate::models::{ASSUME_HOSTNAME_UNIQUE, DISCONNECT_GRACE_PERIOD};
 use crate::traits::iosered::IOSerialized;
@@ -43,8 +44,8 @@ fn handle_new_node(
         serial: *counter,
         address: address.clone(),
         hostname: hostname.clone(),
-        sessions: None,
-        wg_peers: None,
+        sessions: Err(NodeStateError::Initializing),
+        wg_peers: Err(NodeStateError::Initializing),
         last_state_update: UNIX_EPOCH,
         connected: true,
     };

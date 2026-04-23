@@ -69,7 +69,7 @@ pub enum ClientResponse {
     /// Wraps a raw packet response
     RawResponse(Response),
 
-    /// A generic failure with a string-based error
+    /// Generic failure with a string-based error
     Failure(ErrorMessage),
 }
 

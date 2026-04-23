@@ -9,7 +9,7 @@ use std::time::{Duration, SystemTime};
 mod handler;
 mod state;
 use crate::models::NodeConfig;
-use crate::models::nodestate::{NodeState, NodeStateDiff};
+use crate::models::nodestate::{NodeState, NodeStateDiff, NodeStateError};
 use crate::models::packet::{Command, Response};
 use crate::traits::iosered::IOSerialized;
 
@@ -38,8 +38,8 @@ fn worker(
 
     // some local states
     let mut node_state = NodeState {
-        sessions: None,
-        wg_peers: None,
+        sessions: Err(NodeStateError::Initializing),
+        wg_peers: Err(NodeStateError::Initializing),
     };
     let mut last_keepalive = SystemTime::now();
 
@@ -95,8 +95,8 @@ pub fn main(ip: IpAddr, port: u16, node_config: NodeConfig) -> Result<()> {
                 s.spawn(move || -> Result<()> {
                     // local node state tracker, not directly shared with worker
                     let mut node_state = NodeState {
-                        sessions: None,
-                        wg_peers: None,
+                        sessions: Err(NodeStateError::Initializing),
+                        wg_peers: Err(NodeStateError::Initializing),
                     };
                     loop {
                         if *terminate_flag.lock().unwrap() {

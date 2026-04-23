@@ -3,7 +3,7 @@ use std::net::TcpStream;
 use std::process;
 
 use crate::models::NodeConfig;
-use crate::models::nodestate::{NodeState, NodeStateDiff};
+use crate::models::nodestate::{NodeState, NodeStateDiff, NodeStateError};
 use crate::models::packet::{Command, Response, ServiceMode};
 use crate::node::state::{get_sessions, get_wg_peers};
 use crate::traits::exec::Exec;
@@ -77,9 +77,14 @@ pub fn update_node_state(
         ( $( $attr:ident ),* ) => {
             paste::paste! {
             $(let $attr = if node_config.[<enable_ $attr>] {
-                Some([<get_ $attr>]())
+                let result = [<get_ $attr>]();
+                match result {
+                    // repack the result to use NodeStateError
+                    Ok(result) => Ok(result),
+                    Err(e) => Err(NodeStateError::Message(e)),
+                }
             } else {
-                None
+                Err(NodeStateError::NotMonitored)
             };)*
         }}
     }
