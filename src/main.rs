@@ -8,8 +8,7 @@ mod models;
 mod node;
 mod traits;
 mod utils;
-use crate::models::DEFAULT_SOCKET_DIR;
-use crate::models::{DEFAULT_HOST, DEFAULT_PORT, LaunchArgs, NodeConfig};
+use crate::models::{DEFAULT_HOST, DEFAULT_PORT, DEFAULT_SOCKET_DIR, LaunchArgs, NodeConfig};
 use crate::utils::{get_env_var, get_env_var_strict};
 
 const USAGE: &str = "Usage:
@@ -19,14 +18,14 @@ const USAGE: &str = "Usage:
   secmon help                       print this help message
 
 Client commands:
-  secmon list                       list all connected nodes
+  secmon list [sorted]              list all connected nodes
   secmon <node> service             enable/disable some systemctl services
     <enable|disable> [--now]
     <service> [<service>...]
   secmon <node> reboot +<minutes>   reboot server in X minutes
   secmon <node> shutdown-cancel     cancel shutdown
 
-  <node> can be IP or hostname of the node, or \"-\" for all connected nodes.
+  <node> can be address or hostname of the node, or \"-\" for all connected nodes.
 
 Environment:
   HOST=<host> PORT=<port> secmon hub
