@@ -13,8 +13,8 @@ pub enum ServiceMode {
 impl fmt::Display for ServiceMode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            ServiceMode::Enable => write!(f, "Enable"),
-            ServiceMode::Disable => write!(f, "Disable"),
+            ServiceMode::Enable => write!(f, "enable"),
+            ServiceMode::Disable => write!(f, "disable"),
         }
     }
 }
@@ -46,7 +46,7 @@ impl fmt::Display for Command {
             Command::Service(mode, now, services) => {
                 write!(
                     f,
-                    "Command::ServiceEnable(mode=\"{mode}\", now={now}, services=[\"{}\"])",
+                    "Command::Service(mode=\"{mode}\", now={now}, services=[\"{}\"])",
                     services.join("\", \"")
                 )
             }
@@ -94,7 +94,8 @@ impl fmt::Display for Response {
             Response::NodeStateDiff(diff) => write!(f, "Response::{diff}",),
             Response::Result(success, message) => write!(
                 f,
-                "Response::Result(success={success}, message=\"{message}\")"
+                "Response::Result(success={success}, message={:?})",
+                message
             ),
         }
     }

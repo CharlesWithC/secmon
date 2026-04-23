@@ -48,9 +48,14 @@ impl fmt::Display for ClientCommand {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             ClientCommand::List => write!(f, "ClientCommand::List"),
-            ClientCommand::FindNode(query) => write!(f, "ClientCommand::FindNode(query=\"{query}\")"),
+            ClientCommand::FindNode(query) => {
+                write!(f, "ClientCommand::FindNode(query=\"{query}\")")
+            }
             ClientCommand::RawCommand(serial, command) => {
-                write!(f, "ClientCommand::RawCommand(serial={serial}, command={command})")
+                write!(
+                    f,
+                    "ClientCommand::RawCommand(serial={serial}, command={command})"
+                )
             }
             ClientCommand::Quit => write!(f, "ClientCommand::Quit"),
         }
@@ -76,13 +81,15 @@ pub enum ClientResponse {
 impl fmt::Display for ClientResponse {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            ClientResponse::List(nodes) => write!(f, "ClientResponse::List(nodes[{}])", nodes.len()),
+            ClientResponse::List(nodes) => {
+                write!(f, "ClientResponse::List(nodes[{}])", nodes.len())
+            }
             ClientResponse::Node(node) => write!(f, "ClientResponse::Node(node={node})"),
             ClientResponse::RawResponse(response) => {
                 write!(f, "ClientResponse::RawResponse(response={response})")
             }
             ClientResponse::Failure(error) => {
-                write!(f, "ClientResponse::Failure(error=\"{error}\")")
+                write!(f, "ClientResponse::Failure(error={:?})", error)
             }
         }
     }

@@ -135,7 +135,7 @@ pub fn main(ip: IpAddr, port: u16, node_config: NodeConfig) -> Result<()> {
             return Ok(());
         } // otherwise, reconnect
 
-        println!("Reconnecting in 5 seconds...");
-        thread::sleep(Duration::from_secs(5));
+        println!("Reconnecting...");
+        thread::sleep(Duration::from_millis(100));
     }
 }

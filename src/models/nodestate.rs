@@ -26,7 +26,7 @@ impl fmt::Display for NodeStateError {
             NodeStateError::Initializing => write!(f, "NodeStateError::Initializing"),
             NodeStateError::NotMonitored => write!(f, "NodeStateError::NotMonitored"),
             NodeStateError::Message(message) => {
-                write!(f, "NodeStateError::Message(message=\"{message}\")")
+                write!(f, "NodeStateError::Message(message={:?})", message)
             }
         }
     }
