@@ -17,10 +17,16 @@ use crate::traits::iosered::IOSerialized;
 ///
 /// This is a blocking function and does not exit unless interrupted.
 pub fn main(ip: IpAddr, port: u16, node_config: NodeConfig) -> Result<()> {
+    // only print error when last connect is successful
+    // otherwise, retry silently, if applicable
+    // note: initialize to true to print first error
+    let mut last_connect_successful = true;
     loop {
         let result = thread::scope(|s| {
             let mut stream = TcpStream::connect((ip, port))?;
             println!("Connected to hub {ip}:{port}");
+
+            last_connect_successful = true;
 
             // respond hostname on new connection
             stream.write(&Response::Connect(
@@ -121,7 +127,7 @@ pub fn main(ip: IpAddr, port: u16, node_config: NodeConfig) -> Result<()> {
             if !node_config.reconnect {
                 // if no reconnect, then propagate error
                 return Err(e);
-            } else {
+            } else if last_connect_successful {
                 // otherwise, print error here and reconnect
                 eprintln!("{e}");
             }
@@ -130,7 +136,10 @@ pub fn main(ip: IpAddr, port: u16, node_config: NodeConfig) -> Result<()> {
             return Ok(());
         } // otherwise, reconnect
 
-        println!("Reconnecting...");
+        if last_connect_successful {
+            println!("Reconnecting...");
+        }
         thread::sleep(Duration::from_millis(100));
+        last_connect_successful = false;
     }
 }
