@@ -76,11 +76,11 @@ fn update_hub_state(
     let (_, ref mut nodes) = *guard;
     if let Some(index) = nodes.iter().position(|(node, _)| node.serial == serial) {
         macro_rules! update_node_diff {
-                ( $node:expr, $diff:expr, [$( $attr:ident ),*] ) => {
-                    $(if let Some($attr) = diff.$attr {
-                        $node.$attr = $attr;
-                    })*
-                }
+            ( $node:expr, $diff:expr, [$( $attr:ident ),*] ) => {
+                $(if let Some($attr) = diff.$attr {
+                    $node.$attr = $attr;
+                })*
+            }
         }
 
         let node = &mut nodes[index].0;
