@@ -164,7 +164,13 @@ fn thread_main(mut stream: TcpStream, hub_state: &HubStateMutex) -> Result<()> {
         let result = move || -> Result<()> {
             loop {
                 let response = stream.read::<Response>()?;
-                println!("{address} ({hostname}) responded {response}");
+
+                match response {
+                    Response::KeepAlive | Response::Connect(_) => {}
+                    _ => {
+                        println!("{address} ({hostname}) responded {response}");
+                    }
+                }
 
                 match response {
                     Response::KeepAlive => {}  // don't care
