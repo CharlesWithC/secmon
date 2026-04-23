@@ -8,10 +8,10 @@ use std::time::{Duration, SystemTime};
 
 mod handler;
 mod state;
-use crate::iosered::IOSerialized;
 use crate::models::NodeConfig;
 use crate::models::nodestate::{NodeState, NodeStateDiff};
 use crate::models::packet::{Command, Response};
+use crate::traits::iosered::IOSerialized;
 
 /// The real main function that handles commands and responses.
 ///

@@ -4,9 +4,9 @@ use std::os::unix::net::{UnixListener, UnixStream};
 use std::sync::Arc;
 use std::thread;
 
-use crate::iosered::IOSerialized;
 use crate::models::hub::{ClientCommand, ClientResponse, HubStateMutex};
 use crate::models::packet::Response;
+use crate::traits::iosered::IOSerialized;
 
 /// Handles local client command.
 ///

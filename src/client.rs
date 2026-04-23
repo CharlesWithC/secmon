@@ -1,10 +1,10 @@
 use anyhow::{Result, anyhow};
 use std::os::unix::net::UnixStream;
 
-use crate::iosered::IOSerialized;
 use crate::models::hub::{ClientCommand, ClientResponse};
 use crate::models::node::Node;
 use crate::models::packet::{Command, ServiceMode};
+use crate::traits::iosered::IOSerialized;
 
 mod handler;
 
@@ -86,7 +86,10 @@ pub fn main(socket_path: String, command: String) -> Result<()> {
                 .ok_or(anyhow!("\"+<minutes>\" must be provided"))??;
 
             let node = find_node(&mut stream, (*node).to_owned())?;
-            stream.write(&ClientCommand::RawCommand(node.serial, Command::Reboot(minutes)))?;
+            stream.write(&ClientCommand::RawCommand(
+                node.serial,
+                Command::Reboot(minutes),
+            ))?;
 
             let result = stream.read::<ClientResponse>()?;
             stream.write(&ClientCommand::Quit)?;
@@ -94,7 +97,10 @@ pub fn main(socket_path: String, command: String) -> Result<()> {
         }
         [node, "shutdown-cancel"] => {
             let node = find_node(&mut stream, (*node).to_owned())?;
-            stream.write(&ClientCommand::RawCommand(node.serial, Command::ShutdownCancel))?;
+            stream.write(&ClientCommand::RawCommand(
+                node.serial,
+                Command::ShutdownCancel,
+            ))?;
 
             let result = stream.read::<ClientResponse>()?;
             stream.write(&ClientCommand::Quit)?;

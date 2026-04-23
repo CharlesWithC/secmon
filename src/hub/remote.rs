@@ -6,11 +6,11 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use crate::iosered::IOSerialized;
 use crate::models::hub::{ChannelPacket, HubStateMutex};
 use crate::models::node::Node;
 use crate::models::packet::Response;
 use crate::models::{ASSUME_HOSTNAME_UNIQUE, DISCONNECT_GRACE_PERIOD};
+use crate::traits::iosered::IOSerialized;
 
 /// Initializes node connection.
 ///

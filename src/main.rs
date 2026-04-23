@@ -3,11 +3,10 @@ use std::fs;
 use std::{env, process};
 
 mod client;
-mod exec;
 mod hub;
-mod iosered;
 mod models;
 mod node;
+mod traits;
 mod utils;
 use crate::models::DEFAULT_SOCKET_DIR;
 use crate::models::{DEFAULT_HOST, DEFAULT_PORT, LaunchArgs, NodeConfig};
