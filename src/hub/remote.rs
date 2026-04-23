@@ -127,10 +127,14 @@ fn thread_main(mut stream: TcpStream, hub_state: &HubStateMutex) -> Result<()> {
                     let mut guard = hub_state.lock().unwrap();
                     let (_, ref mut nodes) = *guard;
                     if let Some(index) = nodes.iter().position(|(node, _)| node.serial == serial) {
-                        // update node state
+                        macro_rules! update_node {
+                            ( $node:expr, $updated:expr, [$( $attr:ident ),*] ) => {
+                                $($node.$attr = $updated.$attr;)*
+                            }
+                        }
+
                         let node = &mut nodes[index].0;
-                        node.sessions = node_state.sessions;
-                        node.wg_peers = node_state.wg_peers;
+                        update_node!(node, node_state, [sessions, wg_peers]);
                         node.last_state_update = SystemTime::now();
                     } else {
                         // for whatever reason, the node got removed from `hub_state`
@@ -143,14 +147,16 @@ fn thread_main(mut stream: TcpStream, hub_state: &HubStateMutex) -> Result<()> {
                     let mut guard = hub_state.lock().unwrap();
                     let (_, ref mut nodes) = *guard;
                     if let Some(index) = nodes.iter().position(|(node, _)| node.serial == serial) {
-                        // update node state based on difference
+                        macro_rules! update_node_diff {
+                            ( $node:expr, $diff:expr, [$( $attr:ident ),*] ) => {
+                                $(if let Some($attr) = diff.$attr {
+                                    $node.$attr = $attr;
+                                })*
+                            }
+                        }
+
                         let node = &mut nodes[index].0;
-                        if let Some(sessions) = diff.sessions {
-                            node.sessions = sessions;
-                        }
-                        if let Some(wg_peers) = diff.wg_peers {
-                            node.wg_peers = wg_peers;
-                        }
+                        update_node_diff!(node, diff, [sessions, wg_peers]);
                         node.last_state_update = SystemTime::now();
                     } else {
                         eprintln!("{address} ({hostname}) is not a recognized node");

@@ -67,38 +67,41 @@ pub fn handle_command(
 
 /// Fetches and updates `node_state` in place.
 ///
-/// Returns whether an update is made, and the difference between new and old node state.
+/// Returns whether some update is made, and the difference between new and old node states.
 pub fn update_node_state(
     node_config: NodeConfig,
     node_state: &mut NodeState,
 ) -> (bool, NodeStateDiff) {
-    let sessions = if node_config.enable_sessions {
-        Some(get_sessions())
-    } else {
-        None
-    };
-
-    let wg_peers = if node_config.enable_wg_peers {
-        Some(get_wg_peers())
-    } else {
-        None
-    };
-
-    let mut diff = NodeStateDiff {
-        sessions: None,
-        wg_peers: None,
-    };
-    let mut updated = false;
-    if sessions != (*node_state).sessions {
-        (*node_state).sessions = sessions.clone();
-        diff.sessions = Some(sessions);
-        updated = true;
+    /// Macro to fetch updates based on `node_config`.
+    macro_rules! fetch_updates {
+        ( $( $attr:ident ),* ) => {
+            paste::paste! {
+            $(let $attr = if node_config.[<enable_ $attr>] {
+                Some([<get_ $attr>]())
+            } else {
+                None
+            };)*
+        }}
     }
-    if wg_peers != (*node_state).wg_peers {
-        (*node_state).wg_peers = wg_peers.clone();
-        diff.wg_peers = Some(wg_peers);
-        updated = true;
+    fetch_updates!(sessions, wg_peers);
+
+    /// Macro to compare and update node state.
+    ///
+    /// Returns a tuple of whether some update is made, and the difference between new and old states.
+    macro_rules! cmp_upd_state {
+        ( $node_state:expr, [$( $attr:ident ),*] ) => {{
+            let mut diff = NodeStateDiff {
+                $($attr: None,)*
+            };
+            let mut updated = false;
+            $(if $attr != $node_state.$attr {
+                $node_state.$attr = $attr.clone();
+                diff.$attr = Some($attr);
+                updated = true;
+            })*
+            (updated, diff)
+        }}
     }
 
-    (updated, diff)
+    cmp_upd_state!(node_state, [sessions, wg_peers])
 }
