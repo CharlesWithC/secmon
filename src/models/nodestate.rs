@@ -3,6 +3,7 @@ use chrono::DateTime;
 use chrono::offset::Utc;
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
 use crate::utils::get_display_len;
@@ -40,6 +41,8 @@ pub struct NodeState {
     pub sessions: Sessions,
     pub wg_peers: WgPeers,
 }
+
+pub type NodeStateMutex = Arc<Mutex<NodeState>>;
 
 impl fmt::Display for NodeState {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

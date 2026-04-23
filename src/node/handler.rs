@@ -1,13 +1,12 @@
 use anyhow::Result;
-use std::net::TcpStream;
+use crossbeam_channel::Sender;
 use std::process;
 
 use crate::models::NodeConfig;
-use crate::models::nodestate::{NodeState, NodeStateDiff, NodeStateError};
+use crate::models::nodestate::{NodeStateDiff, NodeStateError, NodeStateMutex};
 use crate::models::packet::{Command, Response, ServiceMode};
 use crate::node::state::{get_sessions, get_wg_peers};
 use crate::traits::exec::Exec;
-use crate::traits::iosered::IOSerialized;
 
 /// Returns `Response::Result` constructed from `Result`.
 fn response_result(result: Result<String, String>) -> Response {
@@ -19,13 +18,14 @@ fn response_result(result: Result<String, String>) -> Response {
 
 /// Handles command from hub.
 pub fn handle_command(
-    stream: &mut TcpStream,
+    sw_s: &Sender<Response>,
     command: &Command,
-    node_state: &NodeState,
+    node_state_mutex: &NodeStateMutex,
 ) -> Result<()> {
     match command {
         Command::NodeState => {
-            stream.write(&Response::NodeState(node_state.clone()))?;
+            let node_state = node_state_mutex.lock().unwrap();
+            sw_s.send(Response::NodeState(node_state.clone()))?;
         }
         Command::Service(mode, now, services) => {
             let mode = match mode {
@@ -41,7 +41,7 @@ pub fn handle_command(
 
             let mut command = process::Command::new("systemctl");
             command.args(args);
-            stream.write(&response_result(command.run()))?;
+            sw_s.send(response_result(command.run()))?;
         }
         Command::Reboot(minutes) => {
             let minutes_arg = format!("+{minutes}");
@@ -53,12 +53,12 @@ pub fn handle_command(
 
             let mut command = process::Command::new("shutdown");
             command.args(args);
-            stream.write(&response_result(command.run()))?;
+            sw_s.send(response_result(command.run()))?;
         }
         Command::ShutdownCancel => {
             let mut command = process::Command::new("shutdown");
             command.args(["-c"]);
-            stream.write(&response_result(command.run()))?;
+            sw_s.send(response_result(command.run()))?;
         }
     };
 
@@ -70,7 +70,7 @@ pub fn handle_command(
 /// Returns whether some update is made, and the difference between new and old node states.
 pub fn update_node_state(
     node_config: NodeConfig,
-    node_state: &mut NodeState,
+    node_state_mutex: &NodeStateMutex,
 ) -> (bool, NodeStateDiff) {
     /// Macro to fetch updates based on `node_config`.
     macro_rules! fetch_updates {
@@ -108,5 +108,6 @@ pub fn update_node_state(
         }}
     }
 
+    let mut node_state = node_state_mutex.lock().unwrap();
     cmp_upd_state!(node_state, [sessions, wg_peers])
 }
