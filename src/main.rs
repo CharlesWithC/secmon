@@ -91,7 +91,7 @@ fn main() {
             LaunchArgs::Hub(ip, port)
         }
         "node" => {
-            let ip = get_env_var_strict("HUB_IP", None);
+            let ip = get_env_var_strict("HUB_IP", Some(DEFAULT_HOST));
             let port = get_env_var_strict("HUB_PORT", Some(DEFAULT_PORT));
 
             let reconnect = args.contains(&"--reconnect".to_owned());
