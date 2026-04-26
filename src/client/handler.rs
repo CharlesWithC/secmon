@@ -7,7 +7,7 @@ use std::os::unix::net::UnixStream;
 use crate::models::hub::{ClientCommand, ClientResponse};
 use crate::models::node::Node;
 use crate::models::nodestate::NodeStateError;
-use crate::models::packet::{Command, Response, ServiceMode};
+use crate::models::packet::{Command, Response};
 use crate::traits::iosered::IOSerialized;
 
 /// Sends `FindNode` command to hub daemon,
@@ -40,8 +40,11 @@ fn exec_command(stream: &mut UnixStream, node: &str, command: Command) -> Result
                         }
                         is_first = false;
 
-                        println!("{} ({}) responded:", node.address, node.hostname);
-
+                        println!(
+                            "{} ({})",
+                            node.address.to_string().bold().cyan(),
+                            node.hostname.bold().cyan()
+                        );
                         stream.write(&ClientCommand::RawCommand(node.serial, command.clone()))?;
 
                         let resp = stream.read::<ClientResponse>()?;
@@ -56,6 +59,12 @@ fn exec_command(stream: &mut UnixStream, node: &str, command: Command) -> Result
     } else {
         // send command to a specific node
         let node = find_node(stream, node.to_owned())?;
+
+        println!(
+            "{} ({})",
+            node.address.to_string().bold().cyan(),
+            node.hostname.bold().cyan()
+        );
         stream.write(&ClientCommand::RawCommand(node.serial, command))?;
 
         let resp = stream.read::<ClientResponse>()?;
@@ -159,19 +168,19 @@ fn handle_response(resp: ClientResponse) -> Result<()> {
         ClientResponse::RawResponse(response) => {
             match response {
                 Response::Result(success, message) => {
-                    if success {
-                        if message == "" {
-                            println!("Success (no message)");
+                    println!(
+                        "{}: {}",
+                        if success {
+                            "Success".green().bold()
                         } else {
-                            println!("{message}");
-                        }
-                    } else {
-                        if message == "" {
-                            eprintln!("Error (no message)");
+                            "Error".red().bold()
+                        },
+                        if message != "" {
+                            message
                         } else {
-                            eprintln!("{message}");
+                            "No message".italic().to_string()
                         }
-                    }
+                    );
                 }
                 _ => {
                     println!("{response}");
@@ -204,44 +213,8 @@ pub fn handle_command(stream: &mut UnixStream, command: String) -> Result<()> {
                 }
             }
         }
-        [node, "service", mode @ ("enable" | "disable"), args @ ..] => {
-            let mode = if mode == &"enable" {
-                ServiceMode::Enable
-            } else {
-                ServiceMode::Disable
-            };
-
-            let flag_now = args.contains(&"--now");
-            let has_more_flags = args.iter().any(|v| v.starts_with("-") && v != &"--now");
-            if has_more_flags {
-                return Err(anyhow!("Only --now flag is allowed"));
-            }
-
-            let services = args
-                .iter()
-                .filter(|v| !v.starts_with("--"))
-                .map(|v| (*v).to_owned())
-                .collect::<Vec<String>>();
-            if services.len() == 0 {
-                return Err(anyhow!("At least one service must be specified"));
-            }
-
-            exec_command(stream, *node, Command::Service(mode, flag_now, services))?;
-        }
-        [node, "reboot", args @ ..] => {
-            let minutes = args
-                .iter()
-                .find(|v| v.starts_with("+"))
-                .map(|v| {
-                    v.parse::<u32>()
-                        .map_err(|e| anyhow!("Unable to parse \"+<minutes>\": {e}"))
-                })
-                .ok_or(anyhow!("\"+<minutes>\" must be provided"))??;
-
-            exec_command(stream, *node, Command::Reboot(minutes))?;
-        }
-        [node, "shutdown-cancel"] => {
-            exec_command(stream, *node, Command::ShutdownCancel)?;
+        [node, "execute", label @ ..] => {
+            exec_command(stream, *node, Command::Execute(label.join(" ")))?;
         }
         _ => Err(anyhow!("Invalid command; Use 'secmon help' for help"))?,
     }

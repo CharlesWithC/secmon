@@ -1,3 +1,6 @@
+use std::fs::File;
+use std::io::{self, BufRead};
+use std::path::Path;
 use std::str::FromStr;
 use std::{env, process};
 
@@ -13,26 +16,18 @@ pub fn get_display_len<T, E>(r: &Result<Vec<T>, E>) -> i32 {
 ///
 /// If env var is missing, then returns `default`.
 ///
-/// If env var cannot be parsed, then returns `None`.
-pub fn get_env_var<T: FromStr + ToString>(key: &str, default: Option<T>) -> Option<T>
-where
-    T::Err: std::fmt::Debug,
-{
-    let val = env::var(key);
-    if let Err(_) = val {
-        if let None = default {
-            eprintln!("Missing env var: {key}");
-        }
-        return default;
+/// If env var cannot be parsed, then returns an error.
+pub fn get_env_var<T: FromStr + ToString>(
+    key: &str,
+    default: Option<T>,
+) -> Result<Option<T>, <T as FromStr>::Err> {
+    match env::var(key) {
+        Ok(val) => match val.parse::<T>() {
+            Ok(parsed) => Ok(Some(parsed)),
+            Err(e) => Err(e),
+        },
+        Err(_) => Ok(default),
     }
-
-    let parsed_val = val.unwrap().parse::<T>();
-    if let Err(e) = parsed_val {
-        eprintln!("Failed to parse {key}: {:?}", e);
-        return None;
-    }
-
-    Some(parsed_val.unwrap())
 }
 
 /// Returns parsed env var value for `key`.
@@ -45,5 +40,24 @@ pub fn get_env_var_strict<T: FromStr + ToString>(key: &str, default: Option<T>) 
 where
     T::Err: std::fmt::Debug,
 {
-    get_env_var(key, default).unwrap_or_else(|| process::exit(1))
+    get_env_var(key, default)
+        .unwrap_or_else(|e| {
+            eprintln!("Failed to parse {key}: {:?}", e);
+            process::exit(1);
+        })
+        .unwrap_or_else(|| {
+            eprintln!("Missing env var: {key}");
+            process::exit(1);
+        })
+}
+
+/// Returns an Iterator to the Reader of the lines of the file.
+///
+/// This function is conveniently copied from [Rust By Example](https://doc.rust-lang.org/rust-by-example/std_misc/file/read_lines.html).
+pub fn read_lines<P>(filename: P) -> io::Result<io::Lines<io::BufReader<File>>>
+where
+    P: AsRef<Path>,
+{
+    let file = File::open(filename)?;
+    Ok(io::BufReader::new(file).lines())
 }

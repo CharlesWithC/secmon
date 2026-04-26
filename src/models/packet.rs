@@ -3,58 +3,24 @@ use std::fmt;
 
 use crate::models::nodestate::{NodeState, NodeStateDiff};
 
-/// Whether to enable or disable a service
-#[derive(Serialize, Deserialize, Clone)]
-pub enum ServiceMode {
-    Enable,
-    Disable,
-}
-
-impl fmt::Display for ServiceMode {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            ServiceMode::Enable => write!(f, "enable"),
-            ServiceMode::Disable => write!(f, "disable"),
-        }
-    }
-}
-
 /// Command sent from hub to node
 #[derive(Serialize, Deserialize, Clone)]
 pub enum Command {
     /// Request current node state
     NodeState,
 
-    /// Manage some systemctl services
-    Service(ServiceMode, FlagNow, Vec<ServiceName>),
-
-    /// Schedule node server reboot
-    Reboot(Minutes),
-
-    /// Cancel node server reboot schedule
-    ShutdownCancel,
+    /// Run a preconfigured allowed command
+    Execute(Label),
 }
 
-pub type FlagNow = bool;
-pub type ServiceName = String;
-pub type Minutes = u32;
+pub type Label = String;
 
 impl fmt::Display for Command {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Command::NodeState => write!(f, "Command::NodeState"),
-            Command::Service(mode, now, services) => {
-                write!(
-                    f,
-                    "Command::Service(mode=\"{mode}\", now={now}, services=[\"{}\"])",
-                    services.join("\", \"")
-                )
-            }
-            Command::Reboot(minutes) => {
-                write!(f, "Command::Reboot(in=\"{}min\")", minutes)
-            }
-            Command::ShutdownCancel => {
-                write!(f, "Command::RebootCancel")
+            Command::Execute(label) => {
+                write!(f, "Command::Execute(label=\"{label}\")",)
             }
         }
     }
@@ -72,18 +38,18 @@ pub enum Response {
     Connect(Hostname),
 
     /// Full node state
-    /// 
+    ///
     /// Note: This should only be requested by a `Command`.
-    /// 
+    ///
     /// The full node state is not used to update hub state,
     /// as hub state solely relies on diff rather than full state.
     NodeState(NodeState),
 
     /// Difference of node state compared with last update
-    /// 
+    ///
     /// Note: This cannot be requested by a `Command` because
     /// node sends diff updates automatically.
-    /// 
+    ///
     /// That said, when handling `Response`, `NodeStateDiff` can be safely
     /// ignored, in terms of relaying `Response` to command handler.
     NodeStateDiff(NodeStateDiff),

@@ -17,23 +17,29 @@ const USAGE: &str = "Usage:
     [--reconnect]
   secmon help                       print this help message
 
-Client commands:
+Utility commands:
   secmon list [sorted]              list all connected nodes
-  secmon <node> service             enable/disable some systemctl services
-    <enable|disable> [--now]
-    <service> [<service>...]
-  secmon <node> reboot +<minutes>   reboot server in X minutes
-  secmon <node> shutdown-cancel     cancel shutdown
+  secmon <node> execute <label>     execute a preconfigured allowed command
 
-  <node> can be address or hostname of the node, or \"-\" for all connected nodes.
+  <node> can be address or hostname, or \"-\" for all connected nodes.
 
 Environment:
-  HOST=<host> PORT=<port> secmon hub
-  HUB_IP=<ip> HUB_PORT=<port> secmon node";
+  hub:      HOST=<host> PORT=<port>
+  node:     HUB_IP=<ip> HUB_PORT=<port>
+            COMMAND_ALLOWLIST_FILE=<path>
+
+COMMAND_ALLOWLIST_FILE:
+  A file containing commands that may be executed by hub.
+  Separate label and command with '=', and provide one pair in each line.
+  Label must not contain '=', and command must finish in one line.
+  Example:
+    LABEL=COMMAND
+    update=apt update
+    reboot=shutdown -r";
 
 fn get_socket_path() -> String {
     let mut socket_path = DEFAULT_SOCKET_DIR.to_owned() + "/secmon.sock";
-    if let Some(dir) = get_env_var::<String>("XDG_RUNTIME_DIR", None) {
+    if let Some(dir) = get_env_var::<String>("XDG_RUNTIME_DIR", None).unwrap() {
         if !dir.ends_with("/0") {
             // non-root
             socket_path = dir + "/secmon.sock";

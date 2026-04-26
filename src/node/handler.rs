@@ -4,17 +4,10 @@ use std::process;
 
 use crate::models::NodeConfig;
 use crate::models::nodestate::{NodeStateDiff, NodeStateError, NodeStateMutex};
-use crate::models::packet::{Command, Response, ServiceMode};
+use crate::models::packet::{Command, Response};
 use crate::node::state::{get_sessions, get_wg_peers};
 use crate::traits::exec::Exec;
-
-/// Returns `Response::Result` constructed from `Result`.
-fn response_result(result: Result<String, String>) -> Response {
-    match result {
-        Ok(output) => Response::Result(true, output),
-        Err(error) => Response::Result(false, error),
-    }
-}
+use crate::utils::{get_env_var, read_lines};
 
 /// Handles command from hub.
 pub fn handle_command(
@@ -27,38 +20,49 @@ pub fn handle_command(
             let node_state = node_state_mutex.lock().unwrap();
             sw_s.send(Response::NodeState(node_state.clone()))?;
         }
-        Command::Service(mode, now, services) => {
-            let mode = match mode {
-                ServiceMode::Enable => "enable",
-                ServiceMode::Disable => "disable",
-            };
+        Command::Execute(label) => {
+            match get_env_var::<String>("COMMAND_ALLOWLIST_FILE", None).unwrap() {
+                None => {
+                    sw_s.send(Response::Result(
+                        false,
+                        "Command allowlist not set (Missing env var: COMMAND_ALLOWLIST_FILE)".to_owned(),
+                    ))?;
+                }
+                Some(allowlist_file) => match read_lines(allowlist_file.clone()) {
+                    Err(e) => {
+                        sw_s.send(Response::Result(
+                            false,
+                            format!("Unable to read '{allowlist_file}' (COMMAND_ALLOWLIST_FILE): {:?}", e),
+                        ))?;
+                    }
+                    Ok(lines) => {
+                        for line in lines.map_while(Result::ok) {
+                            match line.split("=").collect::<Vec<_>>().as_slice() {
+                                [line_label, line_command_parts @ ..] if label == line_label => {
+                                    let line_command = line_command_parts.join("=");
+                                    let line_command_parts =
+                                        line_command.split_whitespace().collect::<Vec<_>>();
+                                    let mut command = process::Command::new(line_command_parts[0]);
+                                    command.args(line_command_parts[1..].to_vec());
+                                    let result = command.run();
+                                    sw_s.send(match result {
+                                        Ok(output) => Response::Result(true, output),
+                                        Err(error) => Response::Result(false, error),
+                                    })?;
+                                    return Ok(()); // early return on match
+                                }
+                                _ => {}
+                            }
+                        }
 
-            let args: Vec<&str> = [mode]
-                .into_iter()
-                .chain(now.then_some("--now"))
-                .chain(services.into_iter().map(|v| v.as_str()))
-                .collect();
-
-            let mut command = process::Command::new("systemctl");
-            command.args(args);
-            sw_s.send(response_result(command.run()))?;
-        }
-        Command::Reboot(minutes) => {
-            let minutes_arg = format!("+{minutes}");
-
-            let args: Vec<&str> = ["-r"]
-                .into_iter()
-                .chain(Some(minutes_arg.as_str()))
-                .collect();
-
-            let mut command = process::Command::new("shutdown");
-            command.args(args);
-            sw_s.send(response_result(command.run()))?;
-        }
-        Command::ShutdownCancel => {
-            let mut command = process::Command::new("shutdown");
-            command.args(["-c"]);
-            sw_s.send(response_result(command.run()))?;
+                        // no match
+                        sw_s.send(Response::Result(
+                            false,
+                            format!("'{label}' is not an allowed command"),
+                        ))?;
+                    }
+                },
+            }
         }
     };
 

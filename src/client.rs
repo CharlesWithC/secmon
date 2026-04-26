@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use std::os::unix::net::UnixStream;
 
 use crate::models::hub::ClientCommand;
@@ -10,9 +10,14 @@ mod handler;
 ///
 /// The command is read from command line arguments.
 pub fn main(socket_path: String, command: String) -> Result<()> {
-    let mut stream = UnixStream::connect(socket_path)?;
-
-    let result = handler::handle_command(&mut stream, command);
-    stream.write(&ClientCommand::Quit)?; // quit to close connection gracefully
-    result // propaget result
+    match UnixStream::connect(socket_path) {
+        Ok(ref mut stream) => {
+            let result = handler::handle_command(stream, command);
+            stream.write(&ClientCommand::Quit)?; // quit to close connection gracefully
+            result // propaget result
+        }
+        Err(e) => Err(anyhow!(
+            "Unable to connect to hub daemon; Is hub daemon running?\n{e}"
+        )),
+    }
 }
