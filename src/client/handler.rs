@@ -95,6 +95,7 @@ fn handle_response(resp: ClientResponse) -> Result<()> {
                         "disconnected".red()
                     }
                 );
+                println!("  {}: {}", "serial".bold(), node.serial);
                 println!("  {}: {}", "address".bold(), node.address);
                 let last_state_update_dt: DateTime<Local> = node.last_state_update.into();
                 println!(
@@ -165,6 +166,12 @@ fn handle_response(resp: ClientResponse) -> Result<()> {
             }
             Ok(())
         }
+        ClientResponse::NodeStateDiff(..) => {
+            // minimal viable handling
+            // command-line subscribe is for debug purpose anyway
+            println!("{}", resp);
+            Ok(())
+        }
         ClientResponse::RawResponse(response) => {
             match response {
                 Response::Result(success, message) => {
@@ -211,6 +218,17 @@ pub fn handle_command(stream: &mut UnixStream, command: String) -> Result<()> {
                 _ => {
                     return Err(anyhow!("Hub daemon provided an invalid response: {resp}"));
                 }
+            }
+        }
+        ["subscribe", ..] => {
+            stream.write(&ClientCommand::Subscribe)?;
+
+            println!("Node state diff updates will be printed in terminal.");
+            println!("NOTE: Integrations should communicate with hub over socket.");
+
+            loop {
+                let resp = stream.read::<ClientResponse>()?;
+                handle_response(resp)?;
             }
         }
         [node, "execute", label @ ..] => {

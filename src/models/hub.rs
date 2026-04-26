@@ -4,6 +4,7 @@ use std::fmt;
 use std::sync::{Arc, Mutex};
 
 use crate::models::node::Node;
+use crate::models::nodestate::NodeStateDiff;
 use crate::models::packet::{Command, Response};
 
 type ErrorMessage = String;
@@ -20,7 +21,15 @@ pub type ChannelPacket = (Command, Sender<Response>);
 ///
 /// This is as if telling someone your mail carrier's name who would deliver mails to you.
 pub type HubNodes = Vec<(Node, Sender<ChannelPacket>)>;
-pub type HubState = (u32, HubNodes); // (counter, nodes)
+/// Represents a vector of subscribed clients.
+///
+/// Client adds a Sender here and retains the Receiver to receive updates.
+///
+/// If Sender errors (i.e. client disconnects), then the Sender is removed from the vector.
+///
+/// This is as if providing an email address to subscribe to a mail list.
+pub type SubscribedClients = Vec<Sender<(u32, NodeStateDiff)>>;
+pub type HubState = (u32, HubNodes, SubscribedClients); // (counter, nodes, subscribers)
 pub type HubStateMutex = Arc<Mutex<HubState>>;
 
 /// Command sent from end-user client to hub
@@ -33,6 +42,15 @@ pub enum ClientCommand {
     ///
     /// Hub will try to match the query string with IP and hostname
     FindNode(String),
+
+    /// Subscribe to node state updates
+    ///
+    /// Hub will forward `NodeStateDiff` packets to client
+    ///
+    /// Once subscribed, the connection will be dedicated to diff update
+    ///
+    /// That is, no other command would be accepted on same conenction
+    Subscribe,
 
     /// Wraps a raw packet command
     RawCommand(Serial, Command),
@@ -51,6 +69,7 @@ impl fmt::Display for ClientCommand {
             ClientCommand::FindNode(query) => {
                 write!(f, "ClientCommand::FindNode(query=\"{query}\")")
             }
+            ClientCommand::Subscribe => write!(f, "ClientCommand::Subscribe"),
             ClientCommand::RawCommand(serial, command) => {
                 write!(
                     f,
@@ -71,6 +90,9 @@ pub enum ClientResponse {
     /// A single node
     Node(Node),
 
+    /// Node state diff update
+    NodeStateDiff(u32, NodeStateDiff),
+
     /// Wraps a raw packet response
     RawResponse(Response),
 
@@ -85,6 +107,10 @@ impl fmt::Display for ClientResponse {
                 write!(f, "ClientResponse::List(nodes[{}])", nodes.len())
             }
             ClientResponse::Node(node) => write!(f, "ClientResponse::Node(node={node})"),
+            ClientResponse::NodeStateDiff(serial, diff) => write!(
+                f,
+                "ClientResponse::NodeStateDiff(serial={serial}, diff={diff})"
+            ),
             ClientResponse::RawResponse(response) => {
                 write!(f, "ClientResponse::RawResponse(response={response})")
             }

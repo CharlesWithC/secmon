@@ -5,6 +5,7 @@ use std::sync::Arc;
 use std::thread;
 
 use crate::models::hub::{ClientCommand, ClientResponse, HubStateMutex};
+use crate::models::nodestate::NodeStateDiff;
 use crate::models::packet::Response;
 use crate::traits::iosered::IOSerialized;
 
@@ -15,12 +16,12 @@ fn handle_command(command: ClientCommand, hub_state: &HubStateMutex) -> ClientRe
     match command {
         ClientCommand::List => {
             let guard = hub_state.lock().unwrap();
-            let (_, ref nodes) = *guard;
+            let (_, ref nodes, _) = *guard;
             ClientResponse::List(nodes.into_iter().map(|(node, _)| node.clone()).collect())
         }
         ClientCommand::FindNode(query) => {
             let guard = hub_state.lock().unwrap();
-            let (_, ref nodes) = *guard;
+            let (_, ref nodes, _) = *guard;
 
             nodes
                 .iter()
@@ -36,7 +37,7 @@ fn handle_command(command: ClientCommand, hub_state: &HubStateMutex) -> ClientRe
         }
         ClientCommand::RawCommand(serial, command) => {
             let guard = hub_state.lock().unwrap();
-            let (_, ref nodes) = *guard;
+            let (_, ref nodes, _) = *guard;
 
             if let Some((_, sender)) = nodes.iter().find(|(node, _)| node.serial == serial) {
                 let (resp_s, resp_r) = unbounded::<Response>();
@@ -52,8 +53,28 @@ fn handle_command(command: ClientCommand, hub_state: &HubStateMutex) -> ClientRe
                 ClientResponse::Failure(format!("SERIAL={serial} is not a recognized node"))
             }
         }
-        ClientCommand::Quit => panic!("`CtrlCmd::Quit` should not be handled by `handle_command`"),
+        ClientCommand::Subscribe | ClientCommand::Quit => {
+            panic!("`{command}` should not be handled by `handle_command`")
+        }
     }
+}
+
+/// Handles client subscription creation and data forwarding.
+fn handle_subscribe(mut stream: UnixStream, hub_state: &HubStateMutex) -> Result<()> {
+    let (s, r) = unbounded::<(u32, NodeStateDiff)>();
+
+    let mut guard = hub_state.lock().unwrap();
+    let (_, _, ref mut subscribers) = *guard;
+    subscribers.push(s);
+    drop(guard);
+
+    loop {
+        let (serial, diff) = r.recv()?;
+        stream.write(&ClientResponse::NodeStateDiff(serial, diff))?;
+    }
+
+    // no need to try to remove subscriber
+    // remote would remove zombie subscribers automatically
 }
 
 /// Main thread function for local client connection.
@@ -63,12 +84,20 @@ fn thread_main(mut stream: UnixStream, hub_state: HubStateMutex) -> Result<()> {
     loop {
         let command = stream.read::<ClientCommand>()?;
         println!("Received {command}");
-        if let ClientCommand::Quit = command {
-            return Ok(());
-        }
 
-        let result = handle_command(command, &hub_state);
-        stream.write(&result)?;
+        match command {
+            ClientCommand::Quit => {
+                return Ok(());
+            }
+            ClientCommand::Subscribe => {
+                handle_subscribe(stream, &hub_state)?;
+                return Ok(());
+            }
+            command @ _ => {
+                let result = handle_command(command, &hub_state);
+                stream.write(&result)?
+            }
+        }
     }
 }
 
@@ -83,12 +112,12 @@ pub fn main(listener: UnixListener, hub_state: HubStateMutex) -> () {
 
                 thread::spawn(move || {
                     if let Err(e) = thread_main(stream, hub_state) {
-                        eprintln!("{e}");
+                        eprintln!("Error while handling local connection: {e}");
                     }
                 });
             }
             Err(e) => {
-                eprintln!("{e}");
+                eprintln!("Error accepting local connection: {e}");
             }
         };
     }

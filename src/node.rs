@@ -126,10 +126,10 @@ pub fn main(ip: IpAddr, port: u16, node_config: NodeConfig) -> Result<()> {
         if let Err(e) = result {
             if !node_config.reconnect {
                 // if no reconnect, then propagate error
-                return Err(e);
+                return Err(anyhow!("Error communicating with hub: {e}"));
             } else if last_connect_successful {
                 // otherwise, print error here and reconnect
-                eprintln!("{e}");
+                eprintln!("Error communicating with hub: {e}");
             }
         } else {
             // if no reconnect, then complete and return

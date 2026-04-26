@@ -22,7 +22,7 @@ fn handle_new_node(
     hub_state: &HubStateMutex,
 ) -> (u32, Receiver<ChannelPacket>) {
     let mut guard = hub_state.lock().unwrap();
-    let (ref mut counter, ref mut nodes) = *guard;
+    let (ref mut counter, ref mut nodes, _) = *guard;
 
     // optionally remove possibly disconnected node of same hostname
     if ASSUME_HOSTNAME_UNIQUE {
@@ -73,7 +73,12 @@ fn update_hub_state(
     hub_state: &HubStateMutex,
 ) -> Option<(u32, Receiver<ChannelPacket>)> {
     let mut guard = hub_state.lock().unwrap();
-    let (_, ref mut nodes) = *guard;
+    let (_, ref mut nodes, ref mut subscribers) = *guard;
+
+    // forward diff to clients, keep subscriber only if forward is successful
+    subscribers.retain(|subscriber| subscriber.send((serial, diff.clone())).map(|_| true).unwrap_or(false));
+
+    // update internal node state
     if let Some(index) = nodes.iter().position(|(node, _)| node.serial == serial) {
         macro_rules! update_node {
             ( $node:expr, $diff:expr, [$( $attr:ident ),*] ) => {
@@ -100,7 +105,7 @@ fn update_hub_state(
 /// would error and terminate.
 fn handle_stream_close(serial: u32, hub_state: &HubStateMutex) -> () {
     let mut guard = hub_state.lock().unwrap();
-    let (_, ref mut nodes) = *guard;
+    let (_, ref mut nodes, _) = *guard;
     if let Some(index) = nodes.iter().position(|(node, _)| node.serial == serial) {
         // create a dummy new channel, and replace original sender to drop it
         let (s, _) = unbounded::<ChannelPacket>();
@@ -209,12 +214,12 @@ pub fn main(listener: TcpListener, hub_state: HubStateMutex) -> () {
                     let address = stream.peer_addr().unwrap();
 
                     if let Err(e) = thread_main(stream, &hub_state) {
-                        eprintln!("{e}");
+                        eprintln!("Error while handling remote connection ({address}): {e}");
                     }
 
                     // update `hub_state` to indicate disconnection
                     let mut guard = hub_state.lock().unwrap();
-                    let (_, ref mut nodes) = *guard;
+                    let (_, ref mut nodes, _) = *guard;
                     nodes.iter_mut().for_each(|(node, _)| {
                         if node.address == address {
                             node.connected = false;
@@ -226,7 +231,7 @@ pub fn main(listener: TcpListener, hub_state: HubStateMutex) -> () {
 
                     // delete node from `hub_state` after grace period
                     let mut guard = hub_state.lock().unwrap();
-                    let (_, ref mut nodes) = *guard;
+                    let (_, ref mut nodes, _) = *guard;
                     if let Some(index) = nodes.iter().position(|(node, _)| node.address == address)
                     {
                         nodes.remove(index);
@@ -234,7 +239,7 @@ pub fn main(listener: TcpListener, hub_state: HubStateMutex) -> () {
                 });
             }
             Err(e) => {
-                eprintln!("{e}");
+                eprintln!("Error accepting remote connection: {e}");
             }
         };
     }

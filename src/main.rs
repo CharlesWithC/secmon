@@ -19,6 +19,7 @@ const USAGE: &str = "Usage:
 
 Utility commands:
   secmon list [sorted]              list all connected nodes
+  secmon subscribe                  subscribe to node state diff updates
   secmon <node> execute <label>     execute a preconfigured allowed command
 
   <node> can be address or hostname, or \"-\" for all connected nodes.
@@ -86,7 +87,7 @@ fn main() {
     let args: Vec<String> = env::args().collect();
 
     if args.len() < 2 {
-        eprintln!("{USAGE}");
+        println!("{USAGE}");
         process::exit(1);
     }
 
@@ -115,7 +116,7 @@ fn main() {
             )
         }
         "help" => {
-            eprintln!("{USAGE}");
+            println!("{USAGE}");
             process::exit(0);
         }
         _ => LaunchArgs::Cli(args.into_iter().skip(1).collect::<Vec<_>>().join(" ")),

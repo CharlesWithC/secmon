@@ -4,7 +4,7 @@ use std::os::unix::net::UnixListener;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-use crate::models::hub::{HubNodes, HubStateMutex};
+use crate::models::hub::{HubNodes, HubStateMutex, SubscribedClients};
 
 mod local;
 mod remote;
@@ -28,7 +28,8 @@ pub fn main(ip: IpAddr, port: u16, socket_path: String) -> Result<()> {
         TcpListener::bind((ip, port)).map_err(|e| anyhow!("Unable to bind {ip}:{port}: {e}"))?;
     println!("Listening on {ip}:{port} for nodes");
 
-    let hub_state: HubStateMutex = Arc::new(Mutex::new((0, HubNodes::new())));
+    let hub_state: HubStateMutex =
+        Arc::new(Mutex::new((0, HubNodes::new(), SubscribedClients::new())));
 
     thread::scope(|s| {
         let hub_state_local: HubStateMutex = Arc::clone(&hub_state);
