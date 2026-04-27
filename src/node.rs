@@ -115,15 +115,17 @@ pub fn main(ip: IpAddr, port: u16, node_config: NodeConfig) -> Result<()> {
                 let terminate_flag = Arc::clone(&terminate_flag);
                 let child_opt_mutex = Arc::clone(&child_auth_sshd);
 
-                s.spawn(move || -> Result<()> {
-                    // TODO: error handling => send NodeUpdate::Error
-                    // NOTE: error handling for who/wg should be updated as well
+                s.spawn(move || {
                     loop {
                         if *terminate_flag.lock().unwrap() {
-                            return Ok(());
+                            return;
                         }
 
-                        handler::run_journalctl_sshd(&sw_s, &child_opt_mutex)?;
+                        let success = handler::handle_journalctl_sshd(&sw_s, &child_opt_mutex);
+                        if !success {
+                            // error is relayed to hub; do not retry on error
+                            return;
+                        } // otherwise, child likely got terminated, continue with loop
                     }
                 });
             }

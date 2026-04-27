@@ -58,7 +58,10 @@ impl fmt::Display for NodeState {
 pub struct NodeUpdate {
     pub sessions: Option<Sessions>,
     pub wg_peers: Option<WgPeers>,
-    pub auth_log: Option<AuthLog>,
+    /// We use `AuthLogUpdate` because `AuthLog` does not embed errors.
+    /// 
+    /// Stored states do not require such wrapping as they embed errors already.
+    pub auth_log: Option<AuthLogUpdate>,
 }
 
 impl fmt::Display for NodeUpdate {
@@ -70,8 +73,11 @@ impl fmt::Display for NodeUpdate {
         if let Some(ref wg_peers) = self.wg_peers {
             data.push(format!("wg_peers[{}]", get_display_len(wg_peers)));
         };
-        if let Some(ref auth_log) = self.auth_log {
-            data.push(format!("auth_log({auth_log})"));
+        if let Some(ref auth_log_res) = self.auth_log {
+            match auth_log_res {
+                Ok(auth_log) => data.push(format!("auth_log({auth_log})")),
+                Err(e) => data.push(format!("auth_log(error={e})")),
+            }
         };
         write!(f, "NodeUpdate({})", data.join(", "))
     }
@@ -151,6 +157,8 @@ pub struct AuthLog {
     /// Detail of the entry
     pub detail: AuthLogDetail,
 }
+
+pub type AuthLogUpdate = Result<AuthLog, NodeDataError>;
 
 impl fmt::Display for AuthLog {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

@@ -1,6 +1,6 @@
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use crossbeam_channel::Sender;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Read};
 use std::process;
 use std::sync::{Arc, Mutex};
 
@@ -141,7 +141,7 @@ macro_rules! wait_child {
 /// The child process is moved into `child_opt_mutex` once spawned.
 ///
 /// This is a blocking function and does not exit until child process is killed.
-pub fn run_journalctl_sshd(
+fn run_journalctl_sshd(
     sw_s: &Sender<Response>,
     child_opt_mutex: &Arc<Mutex<Option<process::Child>>>,
 ) -> Result<()> {
@@ -159,9 +159,19 @@ pub fn run_journalctl_sshd(
             "-q", // stay quiet on warning message
         ])
         .stdout(process::Stdio::piped())
-        .spawn()?;
+        .stderr(process::Stdio::piped())
+        .spawn()
+        .map_err(|e| anyhow!("Failed to spawn journalctl child process: {e}"))?;
 
-    let stdout = child.stdout.take().unwrap();
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or(anyhow!("Failed to capture journalctl stdout"))?;
+
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or(anyhow!("Failed to capture journalctl stderr"))?;
 
     let mut guard = child_opt_mutex.lock().unwrap();
     *guard = Some(child);
@@ -170,15 +180,58 @@ pub fn run_journalctl_sshd(
     let reader = BufReader::new(stdout);
     for line in reader.lines().map_while(Result::ok) {
         if let Some(log) = crate::node::data::parse_sshd_log(line)? {
-            sw_s.send(Response::NodeUpdate(NodeUpdate {
+            let result = sw_s.send(Response::NodeUpdate(NodeUpdate {
                 sessions: None,
                 wg_peers: None,
-                auth_log: Some(log),
-            }))?;
+                auth_log: Some(Ok(log)),
+            }));
+            if let Err(_) = result {
+                // channel closed, return
+                // error should only be propagated on "actual" error (e.g. when collecting/parsing data)
+                return Ok(());
+            }
         }
     }
 
     wait_child!(child_opt_mutex);
 
+    let mut reader = BufReader::new(stderr);
+    let mut buf = String::new();
+    reader
+        .read_to_string(&mut buf)
+        .map_err(|e| anyhow!("Unable to process journalctl stderr: {e}"))?;
+    if buf.trim().len() != 0 {
+        let _ = sw_s.send(Response::NodeUpdate(NodeUpdate {
+            sessions: None,
+            wg_peers: None,
+            auth_log: Some(Err(NodeDataError::Message(format!(
+                "Error executing journalctl: {buf}"
+            )))),
+        }));
+    }
+
     Ok(())
+}
+
+/// Handles sshd log collection and error relaying.
+///
+/// Returns `true` if no error is raised, otherwise `false`.
+///
+/// This is a blocking function and does not exit until child process is killed.
+pub fn handle_journalctl_sshd(
+    sw_s: &Sender<Response>,
+    child_opt_mutex: &Arc<Mutex<Option<process::Child>>>,
+) -> bool {
+    let result = run_journalctl_sshd(sw_s, child_opt_mutex);
+    if let Err(e) = result {
+        let _ = sw_s.send(Response::NodeUpdate(NodeUpdate {
+            sessions: None,
+            wg_peers: None,
+            auth_log: Some(Err(NodeDataError::Message(format!(
+                "Error processing sshd log: {e}"
+            )))),
+        }));
+        return false;
+    }
+    return true;
 }
