@@ -1,9 +1,9 @@
 use anyhow::Result;
-use chrono::{Local, NaiveDateTime};
+use chrono::{DateTime, Local, NaiveDateTime};
 use std::process::Command;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use crate::models::node::{Session, WgPeer};
+use crate::models::node::{AuthLog, AuthLogDetail, Session, WgPeer};
 use crate::traits::exec::Exec;
 
 /// Executes `who -w` and returns parsed result.
@@ -103,4 +103,42 @@ pub fn get_wg_peers() -> Result<Vec<WgPeer>, String> {
     }
 
     Ok(wg_peers)
+}
+
+/// Parses a single line of sshd log from journalctl and returns the parsed result.
+pub fn parse_sshd_log(line: String) -> Result<Option<AuthLog>> {
+    let parts = line.split_whitespace().collect::<Vec<_>>();
+
+    let dt = DateTime::parse_from_str(parts[0], "%Y-%m-%dT%H:%M:%S%z")?;
+    let time: SystemTime = dt.into();
+
+    let process = parts[2][..parts[2].len() - 1].to_owned();
+
+    match parts.as_slice()[3..] {
+        #[rustfmt::skip]
+        ["Accepted", method, "for", user, "from", host, "port", port, ..] =>
+            Ok(Some(AuthLog {
+                time,
+                process,
+                user: user.to_owned(),
+                detail: AuthLogDetail::SshConnect((host.to_owned(), port.parse()?), method.to_owned()),
+            })),
+        #[rustfmt::skip]
+        ["Failed", "password", "for", user, "from", host, "port", port, ..] =>
+            Ok(Some(AuthLog {
+                time,
+                process,
+                user: user.to_owned(),
+                detail: AuthLogDetail::SshFailPassword((host.to_owned(), port.parse()?)),
+            })),
+        #[rustfmt::skip]
+        ["Disconnected", "from", "user", user, host, "port", port] =>
+            Ok(Some(AuthLog {
+                time,
+                process,
+                user: user.to_owned(),
+                detail: AuthLogDetail::SshDisconnect((host.to_owned(), port.parse()?)),
+            })),
+        _ => Ok(None),
+    }
 }

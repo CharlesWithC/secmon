@@ -99,18 +99,18 @@ pub type Serial = u32;
 impl fmt::Display for ClientCommand {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            ClientCommand::List => write!(f, "ClientCommand::List"),
-            ClientCommand::Subscribe => write!(f, "ClientCommand::Subscribe"),
-            ClientCommand::FindNode(query) => {
+            Self::List => write!(f, "ClientCommand::List"),
+            Self::Subscribe => write!(f, "ClientCommand::Subscribe"),
+            Self::FindNode(query) => {
                 write!(f, "ClientCommand::FindNode(query=\"{query}\")")
             }
-            ClientCommand::RawCommand(serial, command) => {
+            Self::RawCommand(serial, command) => {
                 write!(
                     f,
                     "ClientCommand::RawCommand(serial={serial}, command={command})"
                 )
             }
-            ClientCommand::Quit => write!(f, "ClientCommand::Quit"),
+            Self::Quit => write!(f, "ClientCommand::Quit"),
         }
     }
 }
@@ -137,18 +137,18 @@ pub enum ClientResponse {
 impl fmt::Display for ClientResponse {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            ClientResponse::List(nodes) => {
+            Self::List(nodes) => {
                 write!(f, "ClientResponse::List(nodes[{}])", nodes.len())
             }
-            ClientResponse::Node(node) => write!(f, "ClientResponse::Node(node={node})"),
-            ClientResponse::NodeUpdate(serial, update) => write!(
+            Self::Node(node) => write!(f, "ClientResponse::Node(node={node})"),
+            Self::NodeUpdate(serial, update) => write!(
                 f,
                 "ClientResponse::NodeUpdate(serial={serial}, data={update})"
             ),
-            ClientResponse::RawResponse(response) => {
+            Self::RawResponse(response) => {
                 write!(f, "ClientResponse::RawResponse(response={response})")
             }
-            ClientResponse::Failure(error) => {
+            Self::Failure(error) => {
                 write!(f, "ClientResponse::Failure(error={:?})", error)
             }
         }

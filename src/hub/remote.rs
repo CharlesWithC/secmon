@@ -58,6 +58,21 @@ fn handle_new_node(
     (*counter, r)
 }
 
+/// Broadcasts node update to subscribed clients.
+///
+/// Client subscription will be removed if data cannot be sent to the client.
+fn broadcast_update(serial: u32, data: &NodeUpdate, hub_state: &HubStateMutex) -> () {
+    let mut guard = hub_state.lock().unwrap();
+    let (_, _, ref mut subscribers) = *guard;
+
+    subscribers.retain(|subscriber| {
+        subscriber
+            .send((serial, data.clone()))
+            .map(|_| true)
+            .unwrap_or(false)
+    });
+}
+
 /// Updates stored node state in hub.
 ///
 /// Note: Full node state is not used to update hub state.
@@ -70,16 +85,18 @@ fn update_hub_state(
     data: NodeUpdate,
     hub_state: &HubStateMutex,
 ) -> Option<(u32, Receiver<ChannelPacket>)> {
-    let mut guard = hub_state.lock().unwrap();
-    let (_, ref mut nodes, ref mut subscribers) = *guard;
+    if let NodeUpdate {
+        sessions: None,
+        wg_peers: None,
+        ..
+    } = data
+    {
+        // no stored data being updated, skip
+        return None;
+    }
 
-    // forward update to clients, keep subscriber only if forward is successful
-    subscribers.retain(|subscriber| {
-        subscriber
-            .send((serial, data.clone()))
-            .map(|_| true)
-            .unwrap_or(false)
-    });
+    let mut guard = hub_state.lock().unwrap();
+    let (_, ref mut nodes, _) = *guard;
 
     // update internal node state
     if let Some(index) = nodes.iter().position(|(node, _)| node.serial == serial) {
@@ -184,11 +201,11 @@ fn thread_main(mut stream: TcpStream, hub_state: &HubStateMutex) -> Result<()> {
                     Response::KeepAlive => {}  // don't care
                     Response::Connect(_) => {} // should not occur
                     Response::NodeUpdate(data) => {
-                        // update hub state; data is forwarded to all subscribed clients
+                        broadcast_update(serial, &data, &hub_state);
                         update_hub_state(serial, &address, &hostname, data, &hub_state);
                     }
                     response @ _ => {
-                        // forward other response directly, including full node state
+                        // broadcast other response directly
                         sr_s.send(response)?;
                     }
                 }

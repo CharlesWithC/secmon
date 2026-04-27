@@ -12,7 +12,7 @@ use crate::utils::{get_env_var, get_env_var_strict};
 
 const USAGE: &str = "Usage:
   secmon hub                        launch hub server
-  secmon node [who] [wg]            launch node server
+  secmon node [who] [wg] [auth]     launch node server
     [--reconnect]
   secmon help                       print this help message
 
@@ -103,6 +103,7 @@ fn main() {
             let reconnect = args.contains(&"--reconnect".to_owned());
             let enable_sessions = args.contains(&"who".to_owned());
             let enable_wg_peers = args.contains(&"wg".to_owned());
+            let enable_auth_log = args.contains(&"auth".to_owned());
 
             LaunchArgs::Node(
                 ip,
@@ -111,6 +112,7 @@ fn main() {
                     reconnect,
                     enable_sessions,
                     enable_wg_peers,
+                    enable_auth_log,
                 },
             )
         }

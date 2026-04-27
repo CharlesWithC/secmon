@@ -24,9 +24,9 @@ pub enum NodeDataError {
 impl fmt::Display for NodeDataError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            NodeDataError::Initializing => write!(f, "NodeDataError::Initializing"),
-            NodeDataError::NotMonitored => write!(f, "NodeDataError::NotMonitored"),
-            NodeDataError::Message(message) => {
+            Self::Initializing => write!(f, "NodeDataError::Initializing"),
+            Self::NotMonitored => write!(f, "NodeDataError::NotMonitored"),
+            Self::Message(message) => {
                 write!(f, "NodeDataError::Message(message={:?})", message)
             }
         }
@@ -58,6 +58,7 @@ impl fmt::Display for NodeState {
 pub struct NodeUpdate {
     pub sessions: Option<Sessions>,
     pub wg_peers: Option<WgPeers>,
+    pub auth_log: Option<AuthLog>,
 }
 
 impl fmt::Display for NodeUpdate {
@@ -69,11 +70,14 @@ impl fmt::Display for NodeUpdate {
         if let Some(ref wg_peers) = self.wg_peers {
             data.push(format!("wg_peers[{}]", get_display_len(wg_peers)));
         };
+        if let Some(ref auth_log) = self.auth_log {
+            data.push(format!("auth_log({auth_log})"));
+        };
         write!(f, "NodeUpdate({})", data.join(", "))
     }
 }
 
-/// User session
+/// User session (stored state)
 #[derive(Serialize, Deserialize, Clone, PartialEq)]
 pub struct Session {
     /// Name of user relevant to the session
@@ -101,7 +105,7 @@ impl fmt::Display for Session {
     }
 }
 
-/// WireGuard peer
+/// WireGuard peer (stored state)
 #[derive(Serialize, Deserialize, Clone, PartialEq)]
 pub struct WgPeer {
     /// WireGuard interface
@@ -134,3 +138,72 @@ impl fmt::Display for WgPeer {
         )
     }
 }
+
+/// Auth log entry (tracked-only; not stored)
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
+pub struct AuthLog {
+    /// Time of the entry
+    pub time: SystemTime,
+    /// process relevant to the entry
+    pub process: String,
+    /// User relevant to entry
+    pub user: String,
+    /// Detail of the entry
+    pub detail: AuthLogDetail,
+}
+
+impl fmt::Display for AuthLog {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let dt: DateTime<Utc> = self.time.into();
+        let time_parsed = format!("{}", dt);
+
+        write!(
+            f,
+            "AuthLog(time=\"{}\", process=\"{}\", user=\"{}\", detail={})",
+            time_parsed, self.process, self.user, self.detail
+        )
+    }
+}
+
+/// Detail of auth log entry
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
+pub enum AuthLogDetail {
+    /// SSH connection started
+    ///
+    /// Example:
+    /// ```Accepted publickey for drako from 1.1.1.1 port 50000 ssh2: ...```
+    SshConnect(AuthOrigin, AuthLoginMethod),
+    /// SSH connection failed
+    ///
+    /// Example:
+    /// ```Failed password for drako from 1.1.1.1.1 port 50000 ssh2```
+    SshFailPassword(AuthOrigin),
+    /// SSH connection closed
+    ///
+    /// Example:
+    /// ```Disconnected from user drako 1.1.1.1 port 50000```
+    SshDisconnect(AuthOrigin),
+}
+
+impl fmt::Display for AuthLogDetail {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::SshConnect((host, port), login_method) => write!(
+                f,
+                "SshConnect(host=\"{}\", port={}, method=\"{}\")",
+                host, port, login_method
+            ),
+            Self::SshFailPassword((host, port)) => {
+                write!(f, "SshFailPassword(host=\"{}\", port={})", host, port)
+            }
+            Self::SshDisconnect((host, port)) => {
+                write!(f, "SshDisconnect(host=\"{}\", port={})", host, port)
+            }
+        }
+    }
+}
+
+/// SSH Origin
+pub type AuthOrigin = (String, u16);
+/// SSH Login Method (publickey, password)
+pub type AuthLoginMethod = String;

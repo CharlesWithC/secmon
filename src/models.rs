@@ -31,11 +31,11 @@ pub enum LaunchArgs {
 impl fmt::Display for LaunchArgs {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            LaunchArgs::Hub(ip, port) => write!(f, "Hub(ip=\"{ip}\", port={port})"),
-            LaunchArgs::Node(ip, port, node_config) => {
+            Self::Hub(ip, port) => write!(f, "Hub(ip=\"{ip}\", port={port})"),
+            Self::Node(ip, port, node_config) => {
                 write!(f, "Node(ip=\"{ip}\", port={port}, {node_config})")
             }
-            LaunchArgs::Client(command) => {
+            Self::Client(command) => {
                 write!(f, "Client(command=\"{}\")", command)
             }
         }
@@ -48,14 +48,15 @@ pub struct NodeConfig {
     pub reconnect: bool,
     pub enable_sessions: bool,
     pub enable_wg_peers: bool,
+    pub enable_auth_log: bool,
 }
 
 impl fmt::Display for NodeConfig {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "reconnect={}, sessions={}, wg_peers={}",
-            self.reconnect, self.enable_sessions, self.enable_wg_peers
+            "reconnect={}, sessions={}, wg_peers={}, auth_log={}",
+            self.reconnect, self.enable_sessions, self.enable_wg_peers, self.enable_auth_log
         )
     }
 }

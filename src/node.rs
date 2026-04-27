@@ -9,7 +9,7 @@ use std::time::{Duration, SystemTime};
 mod data;
 mod handler;
 use crate::models::NodeConfig;
-use crate::models::node::{NodeState, NodeDataError};
+use crate::models::node::{NodeDataError, NodeState};
 use crate::models::packet::{Command, Response};
 use crate::traits::iosered::IOSerialized;
 
@@ -44,6 +44,9 @@ pub fn main(ip: IpAddr, port: u16, node_config: NodeConfig) -> Result<()> {
 
             // flag for terminating threads when main thread is done
             let terminate_flag = Arc::new(Mutex::new(false));
+
+            // long-living child processes to be killed on termination
+            let child_auth_sshd = Arc::new(Mutex::new(None));
 
             // current node state (we cache this to respond to `NodeState` command)
             let node_state_mutex = Arc::new(Mutex::new(NodeState {
@@ -103,6 +106,28 @@ pub fn main(ip: IpAddr, port: u16, node_config: NodeConfig) -> Result<()> {
                 });
             }
 
+            if node_config.enable_auth_log {
+                // thread that tracks `journalctl` for updates on `sshd`
+                // note: to terminate this thread, set `terminate_flag` to `true`
+                //       and then kill the journalctl child process; killing without
+                //       `terminate_flag=true` will cause respawning/retrying
+                let sw_s = sw_s.clone();
+                let terminate_flag = Arc::clone(&terminate_flag);
+                let child_opt_mutex = Arc::clone(&child_auth_sshd);
+
+                s.spawn(move || -> Result<()> {
+                    // TODO: error handling => send NodeUpdate::Error
+                    // NOTE: error handling for who/wg should be updated as well
+                    loop {
+                        if *terminate_flag.lock().unwrap() {
+                            return Ok(());
+                        }
+
+                        handler::run_journalctl_sshd(&sw_s, &child_opt_mutex)?;
+                    }
+                });
+            }
+
             // main function that handles stream read and hub commands
             // note: `stream` and `sw_s` are moved here; this is the only stream "reading" function
             // note: this is a blocking function that terminates on stream close
@@ -118,6 +143,17 @@ pub fn main(ip: IpAddr, port: u16, node_config: NodeConfig) -> Result<()> {
 
             // main worker is done, terminate other threads
             *terminate_flag.lock().unwrap() = true;
+
+            // kill child processes
+            for mutex in [child_auth_sshd] {
+                let ref mut child_opt = *mutex.lock().unwrap();
+                match child_opt {
+                    Some(child) => {
+                        let _ = child.kill();
+                    }
+                    _ => {}
+                }
+            }
 
             // directly relay result
             result

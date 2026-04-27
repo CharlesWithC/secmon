@@ -1,9 +1,11 @@
 use anyhow::Result;
 use crossbeam_channel::Sender;
+use std::io::{BufRead, BufReader};
 use std::process;
+use std::sync::{Arc, Mutex};
 
 use crate::models::NodeConfig;
-use crate::models::node::{NodeDataError, NodeUpdate, NodeStateMutex};
+use crate::models::node::{NodeDataError, NodeStateMutex, NodeUpdate};
 use crate::models::packet::{Command, Response};
 use crate::traits::exec::Exec;
 use crate::utils::{get_env_var, read_lines};
@@ -72,9 +74,9 @@ pub fn handle_command(
     Ok(())
 }
 
-/// Fetches and updates `node_state` in place.
+/// Fetches and updates stored `node_state` in place.
 ///
-/// Returns whether some update is made, and atomic updates of new state.
+/// Returns whether some update is made, and atomic update of new state.
 pub fn update_node_state(
     node_config: NodeConfig,
     node_state_mutex: &NodeStateMutex,
@@ -99,11 +101,12 @@ pub fn update_node_state(
 
     /// Macro to compare and update node state.
     ///
-    /// Returns a tuple of whether some update is made, and atomic updates of new state.
+    /// Returns a tuple of whether some update is made, and atomic update of new state.
     macro_rules! cmp_upd_state {
         ( $node_state:expr, [$( $attr:ident ),*] ) => {{
             let mut data = NodeUpdate {
                 $($attr: None,)*
+                auth_log: None, // auth_log is not monitored here
             };
             let mut updated = false;
             $(if $attr != $node_state.$attr {
@@ -117,4 +120,65 @@ pub fn update_node_state(
 
     let mut node_state = node_state_mutex.lock().unwrap();
     cmp_upd_state!(node_state, [sessions, wg_peers])
+}
+
+/// Macro to try to wait for a child to exit, and ignore error if fails.
+macro_rules! wait_child {
+    ( $child_opt_mutex:expr ) => {
+        let ref mut child_opt = *$child_opt_mutex.lock().unwrap();
+        match child_opt {
+            Some(child) => {
+                let _ = child.wait();
+            }
+            _ => {}
+        }
+        *child_opt = None;
+    };
+}
+
+/// Runs `journalctl -f` on `sshd` logs and sends updates through `sw_s`.
+///
+/// The child process is moved into `child_opt_mutex` once spawned.
+///
+/// This is a blocking function and does not exit until child process is killed.
+pub fn run_journalctl_sshd(
+    sw_s: &Sender<Response>,
+    child_opt_mutex: &Arc<Mutex<Option<process::Child>>>,
+) -> Result<()> {
+    let mut child = process::Command::new("journalctl")
+        .args([
+            "-t",
+            "-sshd", // old sshd identifier
+            "-t",
+            "sshd-session", // modern sshd identifier
+            "-f",           // block and print updates
+            "-n",
+            "0",  // ignore past log
+            "-o", // set timestamp format
+            "short-iso",
+            "-q", // stay quiet on warning message
+        ])
+        .stdout(process::Stdio::piped())
+        .spawn()?;
+
+    let stdout = child.stdout.take().unwrap();
+
+    let mut guard = child_opt_mutex.lock().unwrap();
+    *guard = Some(child);
+    drop(guard);
+
+    let reader = BufReader::new(stdout);
+    for line in reader.lines().map_while(Result::ok) {
+        if let Some(log) = crate::node::data::parse_sshd_log(line)? {
+            sw_s.send(Response::NodeUpdate(NodeUpdate {
+                sessions: None,
+                wg_peers: None,
+                auth_log: Some(log),
+            }))?;
+        }
+    }
+
+    wait_child!(child_opt_mutex);
+
+    Ok(())
 }

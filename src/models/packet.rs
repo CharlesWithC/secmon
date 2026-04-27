@@ -18,8 +18,8 @@ pub type Label = String;
 impl fmt::Display for Command {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Command::NodeState => write!(f, "Command::NodeState"),
-            Command::Execute(label) => {
+            Self::NodeState => write!(f, "Command::NodeState"),
+            Self::Execute(label) => {
                 write!(f, "Command::Execute(label=\"{label}\")",)
             }
         }
@@ -58,11 +58,11 @@ pub type Message = String;
 impl fmt::Display for Response {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Response::KeepAlive => write!(f, "Response::KeepAlive"),
-            Response::Connect(hostname) => write!(f, "Response::Connect(hostname=\"{hostname}\")"),
-            Response::NodeState(node_state) => write!(f, "Response::{node_state}",),
-            Response::NodeUpdate(update) => write!(f, "Response::{update}",),
-            Response::Result(success, message) => write!(
+            Self::KeepAlive => write!(f, "Response::KeepAlive"),
+            Self::Connect(hostname) => write!(f, "Response::Connect(hostname=\"{hostname}\")"),
+            Self::NodeState(node_state) => write!(f, "Response::{node_state}",),
+            Self::NodeUpdate(update) => write!(f, "Response::{update}",),
+            Self::Result(success, message) => write!(
                 f,
                 "Response::Result(success={success}, message={:?})",
                 message
