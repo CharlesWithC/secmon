@@ -8,9 +8,9 @@ use std::time::SystemTime;
 
 use crate::utils::get_display_len;
 
-/// Error info for an attribute of node state
+/// Error info for an attribute of node data
 #[derive(Serialize, Deserialize, Clone, PartialEq)]
-pub enum NodeStateError {
+pub enum NodeDataError {
     /// Hub has not received the first update from node
     Initializing,
 
@@ -21,21 +21,19 @@ pub enum NodeStateError {
     Message(String),
 }
 
-impl fmt::Display for NodeStateError {
+impl fmt::Display for NodeDataError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            NodeStateError::Initializing => write!(f, "NodeStateError::Initializing"),
-            NodeStateError::NotMonitored => write!(f, "NodeStateError::NotMonitored"),
-            NodeStateError::Message(message) => {
-                write!(f, "NodeStateError::Message(message={:?})", message)
+            NodeDataError::Initializing => write!(f, "NodeDataError::Initializing"),
+            NodeDataError::NotMonitored => write!(f, "NodeDataError::NotMonitored"),
+            NodeDataError::Message(message) => {
+                write!(f, "NodeDataError::Message(message={:?})", message)
             }
         }
     }
 }
 
-/// Full state of a node
-///
-/// A `None` attribute means that the attribute is not monitored.
+/// Full tracked and stored state of a node, excluding state that is not stored
 #[derive(Serialize, Deserialize, Clone, PartialEq)]
 pub struct NodeState {
     pub sessions: Sessions,
@@ -55,29 +53,27 @@ impl fmt::Display for NodeState {
     }
 }
 
-/// The difference of a node state
-///
-/// A `None` attribute means the attribute is not updated.
+/// Atomic update from node on tracked state, including state that is not stored
 #[derive(Serialize, Deserialize, Clone, PartialEq)]
-pub struct NodeStateDiff {
+pub struct NodeUpdate {
     pub sessions: Option<Sessions>,
     pub wg_peers: Option<WgPeers>,
 }
 
-impl fmt::Display for NodeStateDiff {
+impl fmt::Display for NodeUpdate {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut diff = Vec::<String>::new();
+        let mut data = Vec::<String>::new();
         if let Some(ref sessions) = self.sessions {
-            diff.push(format!("sessions[{}]", get_display_len(sessions)));
+            data.push(format!("sessions[{}]", get_display_len(sessions)));
         };
         if let Some(ref wg_peers) = self.wg_peers {
-            diff.push(format!("wg_peers[{}]", get_display_len(wg_peers)));
+            data.push(format!("wg_peers[{}]", get_display_len(wg_peers)));
         };
-        write!(f, "NodeStateDiff({})", diff.join(", "))
+        write!(f, "NodeUpdate({})", data.join(", "))
     }
 }
 
-/// User session collected by node
+/// User session
 #[derive(Serialize, Deserialize, Clone, PartialEq)]
 pub struct Session {
     /// Name of user relevant to the session
@@ -88,7 +84,7 @@ pub struct Session {
     pub login: SystemTime,
 }
 
-pub type Sessions = Result<Vec<Session>, NodeStateError>;
+pub type Sessions = Result<Vec<Session>, NodeDataError>;
 
 impl fmt::Display for Session {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -105,7 +101,7 @@ impl fmt::Display for Session {
     }
 }
 
-/// WireGuard peer collected by node
+/// WireGuard peer
 #[derive(Serialize, Deserialize, Clone, PartialEq)]
 pub struct WgPeer {
     /// WireGuard interface
@@ -118,7 +114,7 @@ pub struct WgPeer {
     pub latest_handshake: Option<SystemTime>,
 }
 
-pub type WgPeers = Result<Vec<WgPeer>, NodeStateError>;
+pub type WgPeers = Result<Vec<WgPeer>, NodeDataError>;
 
 impl fmt::Display for WgPeer {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

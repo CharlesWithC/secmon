@@ -6,7 +6,7 @@ use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::models::hub::{ChannelPacket, HubStateMutex, Node};
-use crate::models::node::{NodeStateDiff, NodeStateError};
+use crate::models::node::{NodeDataError, NodeUpdate};
 use crate::models::packet::Response;
 use crate::models::{ASSUME_HOSTNAME_UNIQUE, DISCONNECT_GRACE_PERIOD};
 use crate::traits::iosered::IOSerialized;
@@ -42,8 +42,8 @@ fn handle_new_node(
         serial: *counter,
         address: address.clone(),
         hostname: hostname.clone(),
-        sessions: Err(NodeStateError::Initializing),
-        wg_peers: Err(NodeStateError::Initializing),
+        sessions: Err(NodeDataError::Initializing),
+        wg_peers: Err(NodeDataError::Initializing),
         last_state_update: UNIX_EPOCH,
         connected: true,
     };
@@ -58,7 +58,7 @@ fn handle_new_node(
     (*counter, r)
 }
 
-/// Updates hub state with node state difference.
+/// Updates stored node state in hub.
 ///
 /// Note: Full node state is not used to update hub state.
 ///
@@ -67,16 +67,16 @@ fn update_hub_state(
     serial: u32,
     address: &SocketAddr,
     hostname: &String,
-    diff: NodeStateDiff,
+    data: NodeUpdate,
     hub_state: &HubStateMutex,
 ) -> Option<(u32, Receiver<ChannelPacket>)> {
     let mut guard = hub_state.lock().unwrap();
     let (_, ref mut nodes, ref mut subscribers) = *guard;
 
-    // forward diff to clients, keep subscriber only if forward is successful
+    // forward update to clients, keep subscriber only if forward is successful
     subscribers.retain(|subscriber| {
         subscriber
-            .send((serial, diff.clone()))
+            .send((serial, data.clone()))
             .map(|_| true)
             .unwrap_or(false)
     });
@@ -84,15 +84,15 @@ fn update_hub_state(
     // update internal node state
     if let Some(index) = nodes.iter().position(|(node, _)| node.serial == serial) {
         macro_rules! update_node {
-            ( $node:expr, $diff:expr, [$( $attr:ident ),*] ) => {
-                $(if let Some($attr) = diff.$attr {
+            ( $node:expr, $data:expr, [$( $attr:ident ),*] ) => {
+                $(if let Some($attr) = data.$attr {
                     $node.$attr = $attr;
                 })*
             }
         }
 
         let node = &mut nodes[index].0;
-        update_node!(node, diff, [sessions, wg_peers]);
+        update_node!(node, data, [sessions, wg_peers]);
         node.last_state_update = SystemTime::now();
 
         None
@@ -183,14 +183,12 @@ fn thread_main(mut stream: TcpStream, hub_state: &HubStateMutex) -> Result<()> {
                 match response {
                     Response::KeepAlive => {}  // don't care
                     Response::Connect(_) => {} // should not occur
-                    Response::NodeStateDiff(diff) => {
-                        // use diff to update hub state
-                        // diff is never requested by a command
-                        update_hub_state(serial, &address, &hostname, diff, &hub_state);
+                    Response::NodeUpdate(data) => {
+                        // update hub state; data is forwarded to all subscribed clients
+                        update_hub_state(serial, &address, &hostname, data, &hub_state);
                     }
                     response @ _ => {
-                        // other response, including full node state
-                        // send to command handler on a blocking `sr_r.recv()`
+                        // forward other response directly, including full node state
                         sr_s.send(response)?;
                     }
                 }

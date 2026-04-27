@@ -7,7 +7,7 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
-use crate::models::node::{NodeStateDiff, Sessions, WgPeers};
+use crate::models::node::{NodeUpdate, Sessions, WgPeers};
 use crate::models::packet::{Command, Response};
 use crate::utils::get_display_len;
 
@@ -32,7 +32,7 @@ pub type HubNodes = Vec<(Node, Sender<ChannelPacket>)>;
 /// If Sender errors (i.e. client disconnects), then the Sender is removed from the vector.
 ///
 /// This is as if providing an email address to subscribe to a mail list.
-pub type SubscribedClients = Vec<Sender<(u32, NodeStateDiff)>>;
+pub type SubscribedClients = Vec<Sender<(u32, NodeUpdate)>>;
 pub type HubState = (u32, HubNodes, SubscribedClients); // (counter, nodes, subscribers)
 pub type HubStateMutex = Arc<Mutex<HubState>>;
 
@@ -40,8 +40,6 @@ pub type HubStateMutex = Arc<Mutex<HubState>>;
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Node {
     /// Serial number of node
-    ///
-    /// Each time a new node connects, the serial number should increase.
     pub serial: u32,
     /// Socket address of node
     pub address: SocketAddr,
@@ -53,9 +51,7 @@ pub struct Node {
     pub wg_peers: WgPeers,
     /// Last state update received from node
     pub last_state_update: SystemTime,
-    /// Whether node is connected
-    ///
-    /// Note: When a node disconnects, there is a grace period of 30 seconds before it is removed.
+    /// Whether node is connected (disconnected nodes are removed after grace period)
     pub connected: bool,
 }
 
@@ -75,25 +71,20 @@ impl fmt::Display for Node {
     }
 }
 
-/// Command sent from end-user client to hub
+/// Command sent from client to hub
 #[derive(Serialize, Deserialize, Clone)]
 pub enum ClientCommand {
     /// List all connected nodes
     List,
 
-    /// Finds the first node matching some identifier
-    ///
-    /// Hub will try to match the query string with IP and hostname
-    FindNode(String),
-
     /// Subscribe to node state updates
     ///
-    /// Hub will forward `NodeStateDiff` packets to client
-    ///
-    /// Once subscribed, the connection will be dedicated to diff update
-    ///
-    /// That is, no other command would be accepted on same conenction
+    /// Note: Client may not "unsubscribe". A separate
+    /// connection should be used to send other commands.
     Subscribe,
+
+    /// Finds the first node matching address or hostname
+    FindNode(String),
 
     /// Wraps a raw packet command
     RawCommand(Serial, Command),
@@ -109,10 +100,10 @@ impl fmt::Display for ClientCommand {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             ClientCommand::List => write!(f, "ClientCommand::List"),
+            ClientCommand::Subscribe => write!(f, "ClientCommand::Subscribe"),
             ClientCommand::FindNode(query) => {
                 write!(f, "ClientCommand::FindNode(query=\"{query}\")")
             }
-            ClientCommand::Subscribe => write!(f, "ClientCommand::Subscribe"),
             ClientCommand::RawCommand(serial, command) => {
                 write!(
                     f,
@@ -124,17 +115,17 @@ impl fmt::Display for ClientCommand {
     }
 }
 
-/// Result of executing an end-user client command
+/// Result of processing a client command
 #[derive(Serialize, Deserialize, Clone)]
 pub enum ClientResponse {
     /// A list of all connected nodes
     List(Vec<Node>),
 
-    /// A single node
-    Node(Node),
+    /// Node state update, including tracked but not stored state
+    NodeUpdate(u32, NodeUpdate),
 
-    /// Node state diff update
-    NodeStateDiff(u32, NodeStateDiff),
+    /// A single node with its stored state
+    Node(Node),
 
     /// Wraps a raw packet response
     RawResponse(Response),
@@ -150,9 +141,9 @@ impl fmt::Display for ClientResponse {
                 write!(f, "ClientResponse::List(nodes[{}])", nodes.len())
             }
             ClientResponse::Node(node) => write!(f, "ClientResponse::Node(node={node})"),
-            ClientResponse::NodeStateDiff(serial, diff) => write!(
+            ClientResponse::NodeUpdate(serial, update) => write!(
                 f,
-                "ClientResponse::NodeStateDiff(serial={serial}, diff={diff})"
+                "ClientResponse::NodeUpdate(serial={serial}, data={update})"
             ),
             ClientResponse::RawResponse(response) => {
                 write!(f, "ClientResponse::RawResponse(response={response})")

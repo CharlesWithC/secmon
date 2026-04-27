@@ -18,7 +18,7 @@ const USAGE: &str = "Usage:
 
 Utility commands:
   secmon list [sorted]              list all connected nodes
-  secmon subscribe                  subscribe to node state diff updates
+  secmon subscribe                  subscribe to node state atomic updates
   secmon <node> execute <label>     execute a preconfigured allowed command
 
   <node> can be address or hostname, or \"-\" for all connected nodes.

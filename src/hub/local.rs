@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::thread;
 
 use crate::models::hub::{ClientCommand, ClientResponse, HubStateMutex};
-use crate::models::node::NodeStateDiff;
+use crate::models::node::NodeUpdate;
 use crate::models::packet::Response;
 use crate::traits::iosered::IOSerialized;
 
@@ -61,7 +61,7 @@ fn handle_command(command: ClientCommand, hub_state: &HubStateMutex) -> ClientRe
 
 /// Handles client subscription creation and data forwarding.
 fn handle_subscribe(mut stream: UnixStream, hub_state: &HubStateMutex) -> Result<()> {
-    let (s, r) = unbounded::<(u32, NodeStateDiff)>();
+    let (s, r) = unbounded::<(u32, NodeUpdate)>();
 
     let mut guard = hub_state.lock().unwrap();
     let (_, _, ref mut subscribers) = *guard;
@@ -69,8 +69,8 @@ fn handle_subscribe(mut stream: UnixStream, hub_state: &HubStateMutex) -> Result
     drop(guard);
 
     loop {
-        let (serial, diff) = r.recv()?;
-        stream.write(&ClientResponse::NodeStateDiff(serial, diff))?;
+        let (serial, data) = r.recv()?;
+        stream.write(&ClientResponse::NodeUpdate(serial, data))?;
     }
 
     // no need to try to remove subscriber

@@ -9,7 +9,7 @@ use std::time::{Duration, SystemTime};
 mod data;
 mod handler;
 use crate::models::NodeConfig;
-use crate::models::node::{NodeState, NodeStateError};
+use crate::models::node::{NodeState, NodeDataError};
 use crate::models::packet::{Command, Response};
 use crate::traits::iosered::IOSerialized;
 
@@ -47,8 +47,8 @@ pub fn main(ip: IpAddr, port: u16, node_config: NodeConfig) -> Result<()> {
 
             // current node state (we cache this to respond to `NodeState` command)
             let node_state_mutex = Arc::new(Mutex::new(NodeState {
-                sessions: Err(NodeStateError::Initializing),
-                wg_peers: Err(NodeStateError::Initializing),
+                sessions: Err(NodeDataError::Initializing),
+                wg_peers: Err(NodeDataError::Initializing),
             }));
 
             {
@@ -84,10 +84,10 @@ pub fn main(ip: IpAddr, port: u16, node_config: NodeConfig) -> Result<()> {
                         }
 
                         // update node state
-                        let (updated, diff) =
+                        let (updated, data) =
                             handler::update_node_state(node_config, &node_state_mutex);
                         if updated {
-                            sw_s.send(Response::NodeStateDiff(diff))?;
+                            sw_s.send(Response::NodeUpdate(data))?;
                         }
 
                         // handle keep alive

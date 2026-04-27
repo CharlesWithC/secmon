@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-use crate::models::node::{NodeState, NodeStateDiff};
+use crate::models::node::{NodeState, NodeUpdate};
 
 /// Command sent from hub to node
 #[derive(Serialize, Deserialize, Clone)]
@@ -9,7 +9,7 @@ pub enum Command {
     /// Request current node state
     NodeState,
 
-    /// Run a preconfigured allowed command
+    /// Execute a preconfigured allowed command
     Execute(Label),
 }
 
@@ -34,25 +34,18 @@ pub enum Response {
 
     /// Connection successful
     ///
-    /// This response is only sent once on connection establishment
+    /// This response is only sent once on connection establishment.
     Connect(Hostname),
 
-    /// Full node state
+    /// Full node state of all stored data
     ///
-    /// Note: This should only be requested by a `Command`.
-    ///
-    /// The full node state is not used to update hub state,
-    /// as hub state solely relies on diff rather than full state.
+    /// Note: This may only be requested by a `Command`.
     NodeState(NodeState),
 
-    /// Difference of node state compared with last update
+    /// Atomic update of node state, including tracked but not stored data
     ///
-    /// Note: This cannot be requested by a `Command` because
-    /// node sends diff updates automatically.
-    ///
-    /// That said, when handling `Response`, `NodeStateDiff` can be safely
-    /// ignored, in terms of relaying `Response` to command handler.
-    NodeStateDiff(NodeStateDiff),
+    /// Note: This is sent automatically and may not be requested manually.
+    NodeUpdate(NodeUpdate),
 
     /// Generic result of a command
     Result(Success, Message),
@@ -68,7 +61,7 @@ impl fmt::Display for Response {
             Response::KeepAlive => write!(f, "Response::KeepAlive"),
             Response::Connect(hostname) => write!(f, "Response::Connect(hostname=\"{hostname}\")"),
             Response::NodeState(node_state) => write!(f, "Response::{node_state}",),
-            Response::NodeStateDiff(diff) => write!(f, "Response::{diff}",),
+            Response::NodeUpdate(update) => write!(f, "Response::{update}",),
             Response::Result(success, message) => write!(
                 f,
                 "Response::Result(success={success}, message={:?})",

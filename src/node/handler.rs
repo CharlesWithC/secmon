@@ -3,7 +3,7 @@ use crossbeam_channel::Sender;
 use std::process;
 
 use crate::models::NodeConfig;
-use crate::models::node::{NodeStateDiff, NodeStateError, NodeStateMutex};
+use crate::models::node::{NodeDataError, NodeUpdate, NodeStateMutex};
 use crate::models::packet::{Command, Response};
 use crate::traits::exec::Exec;
 use crate::utils::{get_env_var, read_lines};
@@ -74,11 +74,11 @@ pub fn handle_command(
 
 /// Fetches and updates `node_state` in place.
 ///
-/// Returns whether some update is made, and the difference between new and old node states.
+/// Returns whether some update is made, and atomic updates of new state.
 pub fn update_node_state(
     node_config: NodeConfig,
     node_state_mutex: &NodeStateMutex,
-) -> (bool, NodeStateDiff) {
+) -> (bool, NodeUpdate) {
     /// Macro to fetch updates based on `node_config`.
     macro_rules! fetch_updates {
         ( $( $attr:ident ),* ) => {
@@ -88,10 +88,10 @@ pub fn update_node_state(
                 match result {
                     // repack the result to use NodeStateError
                     Ok(result) => Ok(result),
-                    Err(e) => Err(NodeStateError::Message(e)),
+                    Err(e) => Err(NodeDataError::Message(e)),
                 }
             } else {
-                Err(NodeStateError::NotMonitored)
+                Err(NodeDataError::NotMonitored)
             };)*
         }}
     }
@@ -99,19 +99,19 @@ pub fn update_node_state(
 
     /// Macro to compare and update node state.
     ///
-    /// Returns a tuple of whether some update is made, and the difference between new and old states.
+    /// Returns a tuple of whether some update is made, and atomic updates of new state.
     macro_rules! cmp_upd_state {
         ( $node_state:expr, [$( $attr:ident ),*] ) => {{
-            let mut diff = NodeStateDiff {
+            let mut data = NodeUpdate {
                 $($attr: None,)*
             };
             let mut updated = false;
             $(if $attr != $node_state.$attr {
                 $node_state.$attr = $attr.clone();
-                diff.$attr = Some($attr);
+                data.$attr = Some($attr);
                 updated = true;
             })*
-            (updated, diff)
+            (updated, data)
         }}
     }
 

@@ -5,7 +5,7 @@ use colored::Colorize;
 use std::os::unix::net::UnixStream;
 
 use crate::models::hub::{ClientCommand, ClientResponse, Node};
-use crate::models::node::NodeStateError;
+use crate::models::node::NodeDataError;
 use crate::models::packet::{Command, Response};
 use crate::traits::iosered::IOSerialized;
 
@@ -106,10 +106,10 @@ fn handle_response(resp: ClientResponse) -> Result<()> {
                 macro_rules! print_err {
                     ( $err:expr, $attr:expr ) => {
                         match $err {
-                            NodeStateError::Initializing => {
+                            NodeDataError::Initializing => {
                                 println!("\n{}: Initializing", $attr.yellow().bold())
                             }
-                            NodeStateError::Message(msg) => {
+                            NodeDataError::Message(msg) => {
                                 println!("\n{}: {msg}", $attr.yellow().bold())
                             }
                             _ => {}
@@ -165,7 +165,7 @@ fn handle_response(resp: ClientResponse) -> Result<()> {
             }
             Ok(())
         }
-        ClientResponse::NodeStateDiff(..) => {
+        ClientResponse::NodeUpdate(..) => {
             // minimal viable handling
             // command-line subscribe is for debug purpose anyway
             println!("{}", resp);
@@ -224,7 +224,7 @@ pub fn main(stream: &mut UnixStream, command: String) -> Result<()> {
         ["subscribe", ..] => {
             stream.write(&ClientCommand::Subscribe)?;
 
-            println!("Node state diff updates will be printed in terminal.");
+            println!("Node state atomic updates will be printed in terminal.");
             println!("NOTE: Integrations should communicate with hub over socket.");
 
             loop {
