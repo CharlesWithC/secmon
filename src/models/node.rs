@@ -24,10 +24,10 @@ pub enum NodeDataError {
 impl fmt::Display for NodeDataError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::Initializing => write!(f, "NodeDataError::Initializing"),
-            Self::NotMonitored => write!(f, "NodeDataError::NotMonitored"),
+            Self::Initializing => write!(f, "Initializing"),
+            Self::NotMonitored => write!(f, "NotMonitored"),
             Self::Message(message) => {
-                write!(f, "NodeDataError::Message(message={:?})", message)
+                write!(f, "Message(message={:?})", message)
             }
         }
     }
@@ -59,7 +59,7 @@ pub struct NodeUpdate {
     pub sessions: Option<Sessions>,
     pub wg_peers: Option<WgPeers>,
     /// We use `AuthLogUpdate` because `AuthLog` does not embed errors.
-    /// 
+    ///
     /// Stored states do not require such wrapping as they embed errors already.
     pub auth_log: Option<AuthLogUpdate>,
 }
@@ -191,6 +191,23 @@ pub enum AuthLogDetail {
     /// Example:
     /// ```Disconnected from user drako 1.1.1.1 port 50000```
     SshDisconnect(AuthOrigin),
+    /// SU session opened
+    ///
+    /// Example:
+    /// ```pam_unix(su:session): session opened for user root(uid=0) by drako(uid=0)```
+    SuOpen(TargetUser),
+    /// SU session failed
+    ///
+    /// Example:
+    /// ```FAILED SU (to root) drako on pts/4```
+    SuFail(TargetUser),
+    /// SU session closed
+    /// 
+    /// Note: The source/action user is not provided.
+    ///
+    /// Example:
+    /// ```pam_unix(su:session): session closed for user root```
+    SuClose(TargetUser),
 }
 
 impl fmt::Display for AuthLogDetail {
@@ -207,6 +224,15 @@ impl fmt::Display for AuthLogDetail {
             Self::SshDisconnect((host, port)) => {
                 write!(f, "SshDisconnect(host=\"{}\", port={})", host, port)
             }
+            Self::SuOpen(target) => {
+                write!(f, "SuOpen(target=\"{}\")", target)
+            }
+            Self::SuFail(target) => {
+                write!(f, "SuFail(target=\"{}\")", target)
+            }
+            Self::SuClose(target) => {
+                write!(f, "SuClose(target=\"{}\")", target)
+            }
         }
     }
 }
@@ -215,3 +241,5 @@ impl fmt::Display for AuthLogDetail {
 pub type AuthOrigin = (String, u16);
 /// SSH Login Method (publickey, password)
 pub type AuthLoginMethod = String;
+/// SU Target User
+pub type TargetUser = String;

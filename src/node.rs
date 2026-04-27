@@ -46,7 +46,7 @@ pub fn main(ip: IpAddr, port: u16, node_config: NodeConfig) -> Result<()> {
             let terminate_flag = Arc::new(Mutex::new(false));
 
             // long-living child processes to be killed on termination
-            let child_auth_sshd = Arc::new(Mutex::new(None));
+            let child_journalctl = Arc::new(Mutex::new(None));
 
             // current node state (we cache this to respond to `NodeState` command)
             let node_state_mutex = Arc::new(Mutex::new(NodeState {
@@ -107,13 +107,17 @@ pub fn main(ip: IpAddr, port: u16, node_config: NodeConfig) -> Result<()> {
             }
 
             if node_config.enable_auth_log {
-                // thread that tracks `journalctl` for updates on `sshd`
+                // thread that tracks `journalctl` for updates
                 // note: to terminate this thread, set `terminate_flag` to `true`
                 //       and then kill the journalctl child process; killing without
                 //       `terminate_flag=true` will cause respawning/retrying
+                // note: currently only `auth` log relies on `journalctl`; if more types
+                //       of logs are tracked in the future, update the condition of the
+                //       `if` to trigger this code block on other `node_config`; the handler
+                //       for `journalctl` would decide what logs to track based on `node_config`
                 let sw_s = sw_s.clone();
                 let terminate_flag = Arc::clone(&terminate_flag);
-                let child_opt_mutex = Arc::clone(&child_auth_sshd);
+                let child_opt_mutex = Arc::clone(&child_journalctl);
 
                 s.spawn(move || {
                     loop {
@@ -121,7 +125,8 @@ pub fn main(ip: IpAddr, port: u16, node_config: NodeConfig) -> Result<()> {
                             return;
                         }
 
-                        let success = handler::handle_journalctl_sshd(&sw_s, &child_opt_mutex);
+                        let success =
+                            handler::handle_journalctl(node_config, &sw_s, &child_opt_mutex);
                         if !success {
                             // error is relayed to hub; do not retry on error
                             return;
@@ -147,7 +152,7 @@ pub fn main(ip: IpAddr, port: u16, node_config: NodeConfig) -> Result<()> {
             *terminate_flag.lock().unwrap() = true;
 
             // kill child processes
-            for mutex in [child_auth_sshd] {
+            for mutex in [child_journalctl] {
                 let ref mut child_opt = *mutex.lock().unwrap();
                 match child_opt {
                     Some(child) => {

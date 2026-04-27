@@ -136,28 +136,37 @@ macro_rules! wait_child {
     };
 }
 
-/// Runs `journalctl -f` on `sshd` logs and sends updates through `sw_s`.
+/// Runs `journalctl` as a child process and sends parsed updates through `sw_s`.
 ///
 /// The child process is moved into `child_opt_mutex` once spawned.
 ///
 /// This is a blocking function and does not exit until child process is killed.
-fn run_journalctl_sshd(
+fn run_journalctl(
+    node_config: NodeConfig,
     sw_s: &Sender<Response>,
     child_opt_mutex: &Arc<Mutex<Option<process::Child>>>,
 ) -> Result<()> {
-    let mut child = process::Command::new("journalctl")
-        .args([
+    let mut args = vec![
+        "-f", // block and print updates
+        "-n",
+        "0",  // ignore past log
+        "-o", // set timestamp format
+        "short-iso",
+        "-q", // stay quiet on warning message
+    ]; // base args
+    if node_config.enable_auth_log {
+        args.extend([
             "-t",
             "-sshd", // old sshd identifier
             "-t",
             "sshd-session", // modern sshd identifier
-            "-f",           // block and print updates
-            "-n",
-            "0",  // ignore past log
-            "-o", // set timestamp format
-            "short-iso",
-            "-q", // stay quiet on warning message
-        ])
+            "-t",
+            "su", // su sessions
+        ]);
+    }
+
+    let mut child = process::Command::new("journalctl")
+        .args(args)
         .stdout(process::Stdio::piped())
         .stderr(process::Stdio::piped())
         .spawn()
@@ -179,7 +188,7 @@ fn run_journalctl_sshd(
 
     let reader = BufReader::new(stdout);
     for line in reader.lines().map_while(Result::ok) {
-        if let Some(log) = crate::node::data::parse_sshd_log(line)? {
+        if let Some(log) = crate::node::data::parse_journalctl_log(line)? {
             let result = sw_s.send(Response::NodeUpdate(NodeUpdate {
                 sessions: None,
                 wg_peers: None,
@@ -213,16 +222,17 @@ fn run_journalctl_sshd(
     Ok(())
 }
 
-/// Handles sshd log collection and error relaying.
+/// Handles journalctl log collection and error relaying.
 ///
 /// Returns `true` if no error is raised, otherwise `false`.
 ///
 /// This is a blocking function and does not exit until child process is killed.
-pub fn handle_journalctl_sshd(
+pub fn handle_journalctl(
+    node_config: NodeConfig,
     sw_s: &Sender<Response>,
     child_opt_mutex: &Arc<Mutex<Option<process::Child>>>,
 ) -> bool {
-    let result = run_journalctl_sshd(sw_s, child_opt_mutex);
+    let result = run_journalctl(node_config, sw_s, child_opt_mutex);
     if let Err(e) = result {
         let _ = sw_s.send(Response::NodeUpdate(NodeUpdate {
             sessions: None,

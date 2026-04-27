@@ -105,8 +105,8 @@ pub fn get_wg_peers() -> Result<Vec<WgPeer>, String> {
     Ok(wg_peers)
 }
 
-/// Parses a single line of sshd log from journalctl and returns the parsed result.
-pub fn parse_sshd_log(line: String) -> Result<Option<AuthLog>> {
+/// Parses a single line of journalctl log and returns the parsed result.
+pub fn parse_journalctl_log(line: String) -> Result<Option<AuthLog>> {
     let parts = line.split_whitespace().collect::<Vec<_>>();
 
     let dt = DateTime::parse_from_str(parts[0], "%Y-%m-%dT%H:%M:%S%z")?;
@@ -138,6 +138,31 @@ pub fn parse_sshd_log(line: String) -> Result<Option<AuthLog>> {
                 process,
                 user: user.to_owned(),
                 detail: AuthLogDetail::SshDisconnect((host.to_owned(), port.parse()?)),
+            })),
+        #[rustfmt::skip]
+        ["pam_unix(su:session):", "session", "opened", "for", "user", target_user, "by", user] =>
+            Ok(Some(AuthLog {
+                time,
+                process,
+                user: user.split("(").next().unwrap().to_owned(),
+                detail: AuthLogDetail::SuOpen(target_user.split("(").next().unwrap().to_owned()),
+            })),
+        #[rustfmt::skip]
+        ["FAILED", "SU", "(to", target_user, user, ..] => {
+            Ok(Some(AuthLog {
+                time,
+                process,
+                user: user.to_owned(),
+                detail: AuthLogDetail::SuFail(target_user[..target_user.len()-1].to_owned()),
+            }))
+        },
+        #[rustfmt::skip]
+        ["pam_unix(su:session):", "session", "closed", "for", "user", target_user] =>
+            Ok(Some(AuthLog {
+                time,
+                process,
+                user: String::from(""),
+                detail: AuthLogDetail::SuClose(target_user.to_owned()),
             })),
         _ => Ok(None),
     }
