@@ -3,7 +3,6 @@ use std::net::{IpAddr, Ipv4Addr};
 
 pub mod hub;
 pub mod node;
-pub mod nodestate;
 pub mod packet;
 
 // DEFAULT VALUES
@@ -26,7 +25,7 @@ pub const ASSUME_HOSTNAME_UNIQUE: bool = true;
 pub enum LaunchArgs {
     Hub(IpAddr, u16),
     Node(IpAddr, u16, NodeConfig),
-    Cli(String),
+    Client(String),
 }
 
 impl fmt::Display for LaunchArgs {
@@ -36,8 +35,8 @@ impl fmt::Display for LaunchArgs {
             LaunchArgs::Node(ip, port, node_config) => {
                 write!(f, "Node(ip=\"{ip}\", port={port}, {node_config})")
             }
-            LaunchArgs::Cli(command) => {
-                write!(f, "Cli(command=\"{}\")", command)
+            LaunchArgs::Client(command) => {
+                write!(f, "Client(command=\"{}\")", command)
             }
         }
     }

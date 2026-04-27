@@ -2,7 +2,6 @@ use anyhow::{Result, anyhow};
 use std::fs;
 use std::{env, process};
 
-mod client;
 mod hub;
 mod models;
 mod node;
@@ -61,12 +60,9 @@ fn launch(launch_args: LaunchArgs) -> Result<()> {
                     .map_err(|e| anyhow!("Unable to unlink {socket_path}: {e}"))?;
             }
 
-            crate::hub::main(ip, port, socket_path)?;
+            crate::hub::main_daemon(ip, port, socket_path)?;
         }
-        LaunchArgs::Node(ip, port, node_config) => {
-            crate::node::main(ip, port, node_config)?;
-        }
-        LaunchArgs::Cli(command) => {
+        LaunchArgs::Client(command) => {
             let socket_path = get_socket_path();
             if !fs::exists(&socket_path)
                 .map_err(|e| anyhow!("Unable to access {socket_path}: {e}"))?
@@ -76,7 +72,10 @@ fn launch(launch_args: LaunchArgs) -> Result<()> {
                 ));
             }
 
-            crate::client::main(socket_path, command)?;
+            crate::hub::main_client(socket_path, command)?;
+        }
+        LaunchArgs::Node(ip, port, node_config) => {
+            crate::node::main(ip, port, node_config)?;
         }
     }
 
@@ -119,7 +118,7 @@ fn main() {
             println!("{USAGE}");
             process::exit(0);
         }
-        _ => LaunchArgs::Cli(args.into_iter().skip(1).collect::<Vec<_>>().join(" ")),
+        _ => LaunchArgs::Client(args.into_iter().skip(1).collect::<Vec<_>>().join(" ")),
     };
 
     if let Err(e) = launch(launch_args) {

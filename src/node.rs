@@ -6,10 +6,10 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, SystemTime};
 
+mod data;
 mod handler;
-mod state;
 use crate::models::NodeConfig;
-use crate::models::nodestate::{NodeState, NodeStateError};
+use crate::models::node::{NodeState, NodeStateError};
 use crate::models::packet::{Command, Response};
 use crate::traits::iosered::IOSerialized;
 

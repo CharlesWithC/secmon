@@ -1,11 +1,13 @@
 use anyhow::{Result, anyhow};
 use std::net::{IpAddr, TcpListener};
-use std::os::unix::net::UnixListener;
+use std::os::unix::net::{UnixListener, UnixStream};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-use crate::models::hub::{HubNodes, HubStateMutex, SubscribedClients};
+use crate::models::hub::{ClientCommand, HubNodes, HubStateMutex, SubscribedClients};
+use crate::traits::iosered::IOSerialized;
 
+mod client;
 mod local;
 mod remote;
 
@@ -16,10 +18,10 @@ mod remote;
 //  - remote `node` returns `Response` to `hub/node`
 //  - `hub/node` sends `Response` to `hub/local`, using `Sender<Packet>` provided by `hub/local` earlier
 
-/// Hub main function for handling remote node connections and local client commands.
+/// Hub daemon main function for handling remote node connections and local client commands.
 ///
 /// This is a blocking function and does not exit unless interrupted.
-pub fn main(ip: IpAddr, port: u16, socket_path: String) -> Result<()> {
+pub fn main_daemon(ip: IpAddr, port: u16, socket_path: String) -> Result<()> {
     let listener_local = UnixListener::bind(&socket_path)
         .map_err(|e| anyhow!("Unable to bind {socket_path}: {e}"))?;
     println!("Listening on {socket_path} for client commands");
@@ -44,4 +46,22 @@ pub fn main(ip: IpAddr, port: u16, socket_path: String) -> Result<()> {
     });
 
     Ok(())
+}
+
+/// Hub client main function for handling local client command.
+///
+/// The command is read from command line arguments.
+///
+/// This may be a blocking function depending on the command.
+pub fn main_client(socket_path: String, command: String) -> Result<()> {
+    match UnixStream::connect(socket_path) {
+        Ok(ref mut stream) => {
+            let result = client::main(stream, command);
+            stream.write(&ClientCommand::Quit)?; // quit to close connection gracefully
+            result // propaget result
+        }
+        Err(e) => Err(anyhow!(
+            "Unable to connect to hub daemon; Is hub daemon running?\n{e}"
+        )),
+    }
 }

@@ -3,7 +3,7 @@ use chrono::{Local, NaiveDateTime};
 use std::process::Command;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use crate::models::nodestate::{Session, WgPeer};
+use crate::models::node::{Session, WgPeer};
 use crate::traits::exec::Exec;
 
 /// Executes `who -w` and returns parsed result.

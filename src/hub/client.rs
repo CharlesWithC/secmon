@@ -4,9 +4,8 @@ use chrono::offset::Local;
 use colored::Colorize;
 use std::os::unix::net::UnixStream;
 
-use crate::models::hub::{ClientCommand, ClientResponse};
-use crate::models::node::Node;
-use crate::models::nodestate::NodeStateError;
+use crate::models::hub::{ClientCommand, ClientResponse, Node};
+use crate::models::node::NodeStateError;
 use crate::models::packet::{Command, Response};
 use crate::traits::iosered::IOSerialized;
 
@@ -200,8 +199,10 @@ fn handle_response(resp: ClientResponse) -> Result<()> {
     }
 }
 
-/// Handles command to be sent to hub, and the corresponding response.
-pub fn handle_command(stream: &mut UnixStream, command: String) -> Result<()> {
+/// Main function for command line client.
+///
+/// This sends command to hub, and processes response from hub.
+pub fn main(stream: &mut UnixStream, command: String) -> Result<()> {
     match command.split_whitespace().collect::<Vec<_>>().as_slice() {
         ["list", args @ ..] => {
             stream.write(&ClientCommand::List)?;

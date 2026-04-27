@@ -3,9 +3,8 @@ use crossbeam_channel::Sender;
 use std::process;
 
 use crate::models::NodeConfig;
-use crate::models::nodestate::{NodeStateDiff, NodeStateError, NodeStateMutex};
+use crate::models::node::{NodeStateDiff, NodeStateError, NodeStateMutex};
 use crate::models::packet::{Command, Response};
-use crate::node::state::{get_sessions, get_wg_peers};
 use crate::traits::exec::Exec;
 use crate::utils::{get_env_var, read_lines};
 
@@ -25,14 +24,18 @@ pub fn handle_command(
                 None => {
                     sw_s.send(Response::Result(
                         false,
-                        "Command allowlist not set (Missing env var: COMMAND_ALLOWLIST_FILE)".to_owned(),
+                        "Command allowlist not set (Missing env var: COMMAND_ALLOWLIST_FILE)"
+                            .to_owned(),
                     ))?;
                 }
                 Some(allowlist_file) => match read_lines(allowlist_file.clone()) {
                     Err(e) => {
                         sw_s.send(Response::Result(
                             false,
-                            format!("Unable to read '{allowlist_file}' (COMMAND_ALLOWLIST_FILE): {:?}", e),
+                            format!(
+                                "Unable to read '{allowlist_file}' (COMMAND_ALLOWLIST_FILE): {:?}",
+                                e
+                            ),
                         ))?;
                     }
                     Ok(lines) => {
@@ -81,7 +84,7 @@ pub fn update_node_state(
         ( $( $attr:ident ),* ) => {
             paste::paste! {
             $(let $attr = if node_config.[<enable_ $attr>] {
-                let result = [<get_ $attr>]();
+                let result = crate::node::data::[<get_ $attr>]();
                 match result {
                     // repack the result to use NodeStateError
                     Ok(result) => Ok(result),

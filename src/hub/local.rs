@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::thread;
 
 use crate::models::hub::{ClientCommand, ClientResponse, HubStateMutex};
-use crate::models::nodestate::NodeStateDiff;
+use crate::models::node::NodeStateDiff;
 use crate::models::packet::Response;
 use crate::traits::iosered::IOSerialized;
 

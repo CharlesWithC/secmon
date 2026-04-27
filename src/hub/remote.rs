@@ -1,14 +1,12 @@
 use anyhow::{Result, anyhow};
 use crossbeam_channel::{Receiver, unbounded};
-use std::net::SocketAddr;
-use std::net::{TcpListener, TcpStream};
+use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use crate::models::hub::{ChannelPacket, HubStateMutex};
-use crate::models::node::Node;
-use crate::models::nodestate::{NodeStateDiff, NodeStateError};
+use crate::models::hub::{ChannelPacket, HubStateMutex, Node};
+use crate::models::node::{NodeStateDiff, NodeStateError};
 use crate::models::packet::Response;
 use crate::models::{ASSUME_HOSTNAME_UNIQUE, DISCONNECT_GRACE_PERIOD};
 use crate::traits::iosered::IOSerialized;
@@ -76,7 +74,12 @@ fn update_hub_state(
     let (_, ref mut nodes, ref mut subscribers) = *guard;
 
     // forward diff to clients, keep subscriber only if forward is successful
-    subscribers.retain(|subscriber| subscriber.send((serial, diff.clone())).map(|_| true).unwrap_or(false));
+    subscribers.retain(|subscriber| {
+        subscriber
+            .send((serial, diff.clone()))
+            .map(|_| true)
+            .unwrap_or(false)
+    });
 
     // update internal node state
     if let Some(index) = nodes.iter().position(|(node, _)| node.serial == serial) {

@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-use crate::models::nodestate::{NodeState, NodeStateDiff};
+use crate::models::node::{NodeState, NodeStateDiff};
 
 /// Command sent from hub to node
 #[derive(Serialize, Deserialize, Clone)]
