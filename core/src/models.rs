@@ -11,7 +11,7 @@ pub const DEFAULT_HOST: IpAddr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
 /// Default port for hub and node
 pub const DEFAULT_PORT: u16 = 9992;
 /// Default socket directory for hub <=> client
-pub const DEFAULT_SOCKET_DIR: &str = "/var/run/secmon";
+pub const DEFAULT_SOCKET_DIR: &str = "/var/run";
 
 /// Launch arguments
 pub enum LaunchArgs {

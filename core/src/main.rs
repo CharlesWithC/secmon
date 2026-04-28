@@ -21,7 +21,7 @@ Utility commands:
   secmon subscribe                  subscribe to node state atomic updates
   secmon <node> execute <label>     execute a preconfigured allowed command
 
-  <node> can be address or hostname, or \"-\" for all connected nodes.
+  <node> can be serial, address, hostname, or \"-\" for all connected nodes.
 
 Environment:
   hub:      HOST=<host> PORT=<port> (default: 127.0.0.1:9992)
@@ -39,7 +39,7 @@ COMMAND_ALLOWLIST_FILE:
   Label must not contain '=', and command must finish in one line.
   Examples:
     LABEL=COMMAND
-    update=apt update
+    update=apt update -y
     reboot=shutdown -r";
 
 fn launch(launch_args: LaunchArgs) -> Result<()> {

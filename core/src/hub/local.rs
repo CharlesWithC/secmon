@@ -26,8 +26,9 @@ fn handle_command(command: ClientCommand, hub_state: &HubStateMutex) -> ClientRe
             nodes
                 .iter()
                 .find(|(node, _)| {
-                    // query based on hostname, then address
-                    node.hostname == query
+                    // query based on serial, hostname, address
+                    node.serial.to_string() == query
+                        || node.hostname == query
                         || node.address.to_string().split(":").next() == Some(&query)
                 })
                 .map(|(node, _)| ClientResponse::Node(node.clone()))

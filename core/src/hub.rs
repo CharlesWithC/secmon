@@ -67,7 +67,7 @@ pub fn main_client(socket_path: String, command: String) -> Result<()> {
             result // propaget result
         }
         Err(e) => Err(anyhow!(
-            "Unable to connect to hub daemon; Is hub daemon running?\n{e}"
+            "Unable to connect to hub daemon: {e}"
         )),
     }
 }

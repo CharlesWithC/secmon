@@ -238,7 +238,7 @@ pub fn handle_journalctl(
             sessions: None,
             wg_peers: None,
             auth_log: Some(Err(NodeDataError::Message(format!(
-                "Error processing sshd log: {e}"
+                "Error processing journalctl data: {e}"
             )))),
         }));
         return false;
