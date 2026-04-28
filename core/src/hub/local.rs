@@ -45,6 +45,7 @@ fn handle_command(command: ClientCommand, hub_state: &HubStateMutex) -> ClientRe
                 if let Err(e) = sender.send((command, resp_s)) {
                     return ClientResponse::Failure(format!("{e}"));
                 }
+                drop(guard); // unlock mutex while waiting for response
                 let resp_res = resp_r.recv();
                 match resp_res {
                     Ok(resp) => ClientResponse::RawResponse(resp),

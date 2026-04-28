@@ -117,6 +117,7 @@ fn update_hub_state(
         None
     } else {
         eprintln!("{address} ({hostname}) is not a recognized node");
+        drop(guard); // unlock mutex before trying to lock it again
         Some(handle_new_node(hub_config, address, hostname, hub_state))
     }
 }
@@ -249,7 +250,7 @@ pub fn main(hub_config: HubConfig, listener: TcpListener, hub_state: HubStateMut
                             node.connected = false;
                         }
                     });
-                    drop(guard); // explicitly drop guard to unlock mutex
+                    drop(guard); // unlock mutex before entering grace period
 
                     thread::sleep(Duration::from_secs(hub_config.disconnect_grace_period));
 
