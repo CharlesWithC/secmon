@@ -8,39 +8,44 @@ use std::time::Duration;
 use crate::models::HubConfig;
 use crate::models::hub::{ClientCommand, ClientResponse, HubStateMutex};
 use crate::models::node::NodeUpdate;
-use crate::models::packet::Response;
+use crate::models::packet::{Response, ResultStatus};
 use crate::traits::iosered::IOSerialized;
 
-/// Handles local client command.
+/// Handles one-off local client command.
 ///
 /// Returns the result of executing the command.
 fn handle_command(
+    mut stream: &UnixStream,
     hub_config: HubConfig,
     command: ClientCommand,
     hub_state: &HubStateMutex,
-) -> ClientResponse {
+) -> Result<()> {
     match command {
         ClientCommand::List => {
             let guard = hub_state.lock().unwrap();
             let (_, ref nodes, _) = *guard;
-            ClientResponse::List(nodes.into_iter().map(|(node, _)| node.clone()).collect())
+            stream.write(&ClientResponse::List(
+                nodes.into_iter().map(|(node, _)| node.clone()).collect(),
+            ))?;
         }
         ClientCommand::FindNode(query) => {
             let guard = hub_state.lock().unwrap();
             let (_, ref nodes, _) = *guard;
 
-            nodes
-                .iter()
-                .find(|(node, _)| {
-                    // query based on serial, hostname, address
-                    node.serial.to_string() == query
-                        || node.hostname == query
-                        || node.address.to_string().split(":").next() == Some(&query)
-                })
-                .map(|(node, _)| ClientResponse::Node(node.clone()))
-                .unwrap_or(ClientResponse::Failure(format!(
-                    "unable to identify node with '{query}'"
-                )))
+            stream.write(
+                &nodes
+                    .iter()
+                    .find(|(node, _)| {
+                        // query based on serial, hostname, address
+                        node.serial.to_string() == query
+                            || node.hostname == query
+                            || node.address.to_string().split(":").next() == Some(&query)
+                    })
+                    .map(|(node, _)| ClientResponse::Node(node.clone()))
+                    .unwrap_or(ClientResponse::Failure(format!(
+                        "unable to identify node with '{query}'"
+                    ))),
+            )?;
         }
         ClientCommand::RawCommand(serial, command) => {
             let guard = hub_state.lock().unwrap();
@@ -49,27 +54,51 @@ fn handle_command(
             if let Some((_, sender)) = nodes.iter().find(|(node, _)| node.serial == serial) {
                 let (resp_s, resp_r) = unbounded::<Response>();
                 if let Err(e) = sender.send((command, resp_s)) {
-                    return ClientResponse::Failure(format!("{e}"));
+                    stream.write(&ClientResponse::Failure(format!("{e}")))?;
+                    return Ok(());
                 }
                 drop(guard); // unlock mutex while waiting for response
-                let resp_res =
-                    resp_r.recv_timeout(Duration::from_secs(hub_config.remote_exec_timeout));
-                match resp_res {
-                    Ok(resp) => ClientResponse::RawResponse(resp),
-                    Err(e) => ClientResponse::Failure(format!("{e}")),
+
+                loop {
+                    let resp_res =
+                        resp_r.recv_timeout(Duration::from_secs(hub_config.remote_exec_timeout));
+
+                    match resp_res {
+                        Ok(resp) => {
+                            match resp {
+                                Response::ResultStream(ResultStatus::Pending, _) => {
+                                    // keep streaming response
+                                    stream.write(&ClientResponse::RawResponse(resp))?;
+                                }
+                                _ => {
+                                    // one-off response OR stream finished
+                                    stream.write(&ClientResponse::RawResponse(resp))?;
+                                    break;
+                                }
+                            };
+                        }
+                        Err(e) => {
+                            stream.write(&ClientResponse::Failure(format!("{e}")))?;
+                            return Ok(());
+                        }
+                    }
                 }
             } else {
-                ClientResponse::Failure(format!("SERIAL={serial} is not a recognized node"))
+                stream.write(&ClientResponse::Failure(format!(
+                    "SERIAL={serial} is not a recognized node"
+                )))?;
             }
         }
         ClientCommand::Subscribe | ClientCommand::Quit => {
-            panic!("`{command}` should not be handled by `handle_command`")
+            panic!("handle_command: `{command}` should not be handled by this function")
         }
     }
+
+    Ok(())
 }
 
 /// Handles client subscription creation and data forwarding.
-fn handle_subscribe(mut stream: UnixStream, hub_state: &HubStateMutex) -> Result<()> {
+fn handle_subscribe(mut stream: &UnixStream, hub_state: &HubStateMutex) -> Result<()> {
     let (s, r) = unbounded::<(u32, NodeUpdate)>();
 
     let mut guard = hub_state.lock().unwrap();
@@ -103,12 +132,10 @@ fn thread_main(
                 return Ok(());
             }
             ClientCommand::Subscribe => {
-                handle_subscribe(stream, &hub_state)?;
-                return Ok(());
+                handle_subscribe(&stream, &hub_state)?;
             }
             command @ _ => {
-                let result = handle_command(hub_config, command, &hub_state);
-                stream.write(&result)?
+                handle_command(&stream, hub_config, command, &hub_state)?;
             }
         }
     }

@@ -6,9 +6,46 @@ use std::sync::{Arc, Mutex};
 
 use crate::models::NodeConfig;
 use crate::models::node::{NodeDataError, NodeStateMutex, NodeUpdate};
-use crate::models::packet::{Command, Response};
+use crate::models::packet::{Command, Response, ResultStatus};
 use crate::traits::exec::Exec;
 use crate::utils::{get_env_var, read_lines};
+
+/// Handles raw command execution.
+fn handle_exec_command(
+    sw_s: &Sender<Response>,
+    command: process::Command,
+    stream: bool,
+) -> Result<()> {
+    if !stream {
+        let result = command.run();
+        sw_s.send(match result {
+            Ok(output) => Response::Result(true, output),
+            Err(error) => Response::Result(false, error),
+        })?;
+    } else {
+        match command.stream() {
+            Ok((child, reader)) => {
+                let buf_reader = BufReader::new(reader);
+
+                for line in buf_reader.lines().map_while(Result::ok) {
+                    sw_s.send(Response::ResultStream(ResultStatus::Pending, line))?;
+                }
+
+                let output = child.wait_with_output()?;
+                sw_s.send(Response::ResultStream(
+                    if output.status.success() {
+                        ResultStatus::Success
+                    } else {
+                        ResultStatus::Failure
+                    },
+                    String::from(""),
+                ))?;
+            }
+            Err(e) => sw_s.send(Response::Result(false, e))?,
+        }
+    }
+    Ok(())
+}
 
 /// Handles command from hub.
 pub fn handle_command(
@@ -21,7 +58,7 @@ pub fn handle_command(
             let node_state = node_state_mutex.lock().unwrap();
             sw_s.send(Response::NodeState(node_state.clone()))?;
         }
-        Command::Execute(label) => {
+        Command::Execute(label, stream) => {
             match get_env_var::<String>("COMMAND_ALLOWLIST_FILE", None).unwrap() {
                 None => {
                     sw_s.send(Response::Result(
@@ -43,23 +80,26 @@ pub fn handle_command(
                     Ok(lines) => {
                         for line in lines.map_while(Result::ok) {
                             match line.split("=").collect::<Vec<_>>().as_slice() {
-                                #[rustfmt::skip]
                                 [line_label, line_command_parts @ ..] if label == line_label => {
                                     let line_command = line_command_parts.join("=");
-                                    let parts_res = shlex::split(line_command.as_str());
-                                    if let None = parts_res {
-                                        sw_s.send(Response::Result(false, format!("Failed to parse command for '{line_label}'")))?;
-                                        return Ok(());
+                                    match shlex::split(line_command.as_str()) {
+                                        Some(parts) => {
+                                            let mut command =
+                                                process::Command::new(parts[0].as_str());
+                                            command.args(parts[1..].to_vec());
+                                            handle_exec_command(sw_s, command, *stream)?;
+                                        }
+                                        None => {
+                                            sw_s.send(Response::Result(
+                                                false,
+                                                format!(
+                                                    "Failed to parse command for '{line_label}'"
+                                                ),
+                                            ))?;
+                                        }
                                     }
-                                    let parts = parts_res.unwrap();
-                                    let mut command = process::Command::new(parts[0].as_str());
-                                    command.args(parts[1..].to_vec());
-                                    let result = command.run();
-                                    sw_s.send(match result {
-                                        Ok(output) => Response::Result(true, output),
-                                        Err(error) => Response::Result(false, error),
-                                    })?;
-                                    return Ok(()); // early return on match
+
+                                    return Ok(());
                                 }
                                 _ => {}
                             }

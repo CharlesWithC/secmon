@@ -26,7 +26,7 @@ Utility commands:
 Environment:
   hub:      BIND_IP=<ip> BIND_PORT=<port>       (default: 127.0.0.1:9992)
             REMOTE_EXEC_TIMEOUT=<seconds>       (default: 30)
-                when to timeout a remote raw command execution
+                when to timeout a remote command execution
             DISCONNECT_GRACE_PERIOD=<seconds>   (default: 30)
                 when to remove a disconnected node, if not replaced
             ASSUME_HOSTNAME_UNIQUE=<true|false> (default: true)

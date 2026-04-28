@@ -6,7 +6,7 @@ use std::os::unix::net::UnixStream;
 
 use crate::models::hub::{ClientCommand, ClientResponse, Node};
 use crate::models::node::NodeDataError;
-use crate::models::packet::{Command, Response};
+use crate::models::packet::{Command, Response, ResultStatus};
 use crate::traits::iosered::IOSerialized;
 
 /// Sends `FindNode` command to hub daemon,
@@ -23,54 +23,37 @@ fn find_node(stream: &mut UnixStream, node: String) -> Result<Node> {
     }
 }
 
-/// Executes command on given nodes and handles response.
-fn exec_command(stream: &mut UnixStream, node: &str, command: Command) -> Result<()> {
-    if node == "-" {
-        // send command to all connected nodes
-        stream.write(&ClientCommand::List)?;
+/// Executes command on a specific node and handles response.
+fn exec_command(stream: &mut UnixStream, node: Node, command: Command) -> Result<()> {
+    println!(
+        "{} ({})",
+        node.address.to_string().bold().cyan(),
+        node.hostname.bold().cyan()
+    );
+    stream.write(&ClientCommand::RawCommand(node.serial, command))?;
+
+    loop {
         let resp = stream.read::<ClientResponse>()?;
         match resp {
-            ClientResponse::List(nodes) => {
-                let mut is_first = true;
-                for node in nodes {
-                    if node.connected {
-                        if !is_first {
-                            println!("");
-                        }
-                        is_first = false;
-
-                        println!(
-                            "{} ({})",
-                            node.address.to_string().bold().cyan(),
-                            node.hostname.bold().cyan()
-                        );
-                        stream.write(&ClientCommand::RawCommand(node.serial, command.clone()))?;
-
-                        let resp = stream.read::<ClientResponse>()?;
-                        handle_response(resp)?;
+            ClientResponse::RawResponse(resp) => match resp {
+                Response::ResultStream(status, line) => match status {
+                    ResultStatus::Pending => {
+                        println!("{line}");
                     }
-                }
-            }
-            _ => {
-                return Err(anyhow!("Hub daemon provided an invalid response: {resp}"));
-            }
+                    ResultStatus::Success => {
+                        println!("Done: {}", "Success".green().bold());
+                        return Ok(());
+                    }
+                    ResultStatus::Failure => {
+                        println!("Done: {}", "Failure".red().bold());
+                        return Ok(());
+                    }
+                },
+                _ => handle_response(ClientResponse::RawResponse(resp))?,
+            },
+            _ => handle_response(resp)?,
         }
-    } else {
-        // send command to a specific node
-        let node = find_node(stream, node.to_owned())?;
-
-        println!(
-            "{} ({})",
-            node.address.to_string().bold().cyan(),
-            node.hostname.bold().cyan()
-        );
-        stream.write(&ClientCommand::RawCommand(node.serial, command))?;
-
-        let resp = stream.read::<ClientResponse>()?;
-        handle_response(resp)?;
     }
-
-    Ok(())
 }
 
 /// Handles response from hub.
@@ -233,7 +216,33 @@ pub fn main(stream: &mut UnixStream, command: String) -> Result<()> {
             }
         }
         [node, "execute", label @ ..] => {
-            exec_command(stream, *node, Command::Execute(label.join(" ")))?;
+            let command = Command::Execute(label.join(" "), true);
+
+            if node == &"-" {
+                stream.write(&ClientCommand::List)?;
+                let resp = stream.read::<ClientResponse>()?;
+                match resp {
+                    ClientResponse::List(nodes) => {
+                        let mut is_first = true;
+                        for node in nodes {
+                            if node.connected {
+                                if !is_first {
+                                    println!("");
+                                }
+                                is_first = false;
+
+                                exec_command(stream, node, command.clone())?;
+                            }
+                        }
+                    }
+                    _ => {
+                        return Err(anyhow!("Hub daemon provided an invalid response: {resp}"));
+                    }
+                }
+            } else {
+                let node = find_node(stream, node.to_string())?;
+                exec_command(stream, node, command)?;
+            }
         }
         _ => Err(anyhow!("Invalid command; Use 'secmon help' for help"))?,
     }

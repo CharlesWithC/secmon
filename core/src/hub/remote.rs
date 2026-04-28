@@ -8,7 +8,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use crate::models::HubConfig;
 use crate::models::hub::{ChannelPacket, HubStateMutex, Node};
 use crate::models::node::{NodeDataError, NodeUpdate};
-use crate::models::packet::Response;
+use crate::models::packet::{Response, ResultStatus};
 use crate::traits::iosered::IOSerialized;
 
 /// Initializes node connection.
@@ -184,8 +184,21 @@ fn thread_main(
                     // that said, we won't receive a response that doesn't match command
                     let (command, resp_sender) = cmd_receiver.recv()?;
                     sw.write(&command)?;
-                    let response = sr_r.recv()?;
-                    resp_sender.send(response)?;
+                    loop {
+                        let response = sr_r.recv()?;
+
+                        match response {
+                            Response::ResultStream(ResultStatus::Pending, _) => {
+                                // keep streaming response
+                                resp_sender.send(response)?;
+                            }
+                            _ => {
+                                // one-off response
+                                resp_sender.send(response)?;
+                                break;
+                            }
+                        }
+                    }
                 }
             });
         }

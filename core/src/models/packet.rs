@@ -10,17 +10,18 @@ pub enum Command {
     NodeState,
 
     /// Execute a preconfigured allowed command
-    Execute(Label),
+    Execute(Label, Stream),
 }
 
 pub type Label = String;
+pub type Stream = bool;
 
 impl fmt::Display for Command {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::NodeState => write!(f, "Command::NodeState"),
-            Self::Execute(label) => {
-                write!(f, "Command::Execute(label=\"{label}\")",)
+            Self::Execute(label, stream) => {
+                write!(f, "Command::Execute(label=\"{label}\", stream={stream})",)
             }
         }
     }
@@ -49,11 +50,33 @@ pub enum Response {
 
     /// Generic result of a command
     Result(Success, Message),
+
+    /// Partial result from streaming
+    ResultStream(ResultStatus, Line),
+}
+
+/// Status of a streamed result
+#[derive(Serialize, Deserialize, Clone)]
+pub enum ResultStatus {
+    Pending,
+    Success,
+    Failure,
+}
+
+impl fmt::Display for ResultStatus {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Pending => write!(f, "pending"),
+            Self::Success => write!(f, "success"),
+            Self::Failure => write!(f, "failure"),
+        }
+    }
 }
 
 pub type Hostname = String;
 pub type Success = bool;
 pub type Message = String;
+pub type Line = String;
 
 impl fmt::Display for Response {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -67,6 +90,13 @@ impl fmt::Display for Response {
                 "Response::Result(success={success}, message={:?})",
                 message
             ),
+            Self::ResultStream(status, line) => {
+                write!(
+                    f,
+                    "Response::ResultStream(status=\"{status}\", line={:?})",
+                    line
+                )
+            }
         }
     }
 }
