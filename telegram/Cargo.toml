@@ -1,8 +1,9 @@
 [package]
-name = "secmon-telegram"
+name = "secmon-tg"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+anyhow = "1.0.102"
 frankenstein = { version = "0.49.0", features = ["client-ureq"] }
 secmon = { path = "../core" }

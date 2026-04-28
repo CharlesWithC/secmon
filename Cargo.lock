@@ -654,9 +654,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "secmon-telegram"
+name = "secmon-tg"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "frankenstein",
  "secmon",
 ]

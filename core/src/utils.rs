@@ -4,6 +4,8 @@ use std::path::Path;
 use std::str::FromStr;
 use std::{env, process};
 
+use crate::models::DEFAULT_SOCKET_DIR;
+
 /// Returns the length for display for a `Result<Vec<_>>` value.
 ///
 /// If the `Result` is an `Err`, then returns `-1`;
@@ -60,4 +62,17 @@ where
 {
     let file = File::open(filename)?;
     Ok(io::BufReader::new(file).lines())
+}
+
+/// Returns the socket path that should be used for client communication.
+pub fn get_socket_path() -> String {
+    let mut socket_path = DEFAULT_SOCKET_DIR.to_owned() + "/secmon.sock";
+    if let Some(dir) = get_env_var::<String>("XDG_RUNTIME_DIR", None).unwrap() {
+        if !dir.ends_with("/0") {
+            // non-root
+            socket_path = dir + "/secmon.sock";
+        }
+    }
+
+    socket_path
 }

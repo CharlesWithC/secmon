@@ -7,10 +7,8 @@ mod models;
 mod node;
 mod traits;
 mod utils;
-use crate::models::{
-    DEFAULT_HOST, DEFAULT_PORT, DEFAULT_SOCKET_DIR, HubConfig, LaunchArgs, NodeConfig,
-};
-use crate::utils::{get_env_var, get_env_var_strict};
+use crate::models::{DEFAULT_HOST, DEFAULT_PORT, HubConfig, LaunchArgs, NodeConfig};
+use crate::utils::{get_env_var_strict, get_socket_path};
 
 const USAGE: &str = "Usage:
   secmon hub                        launch hub server
@@ -43,18 +41,6 @@ COMMAND_ALLOWLIST_FILE:
     LABEL=COMMAND
     update=apt update
     reboot=shutdown -r";
-
-fn get_socket_path() -> String {
-    let mut socket_path = DEFAULT_SOCKET_DIR.to_owned() + "/secmon.sock";
-    if let Some(dir) = get_env_var::<String>("XDG_RUNTIME_DIR", None).unwrap() {
-        if !dir.ends_with("/0") {
-            // non-root
-            socket_path = dir + "/secmon.sock";
-        }
-    }
-
-    socket_path
-}
 
 fn launch(launch_args: LaunchArgs) -> Result<()> {
     match launch_args {
