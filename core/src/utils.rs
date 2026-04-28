@@ -3,8 +3,7 @@ use std::io::{self, BufRead};
 use std::path::Path;
 use std::str::FromStr;
 use std::{env, process};
-
-use crate::models::DEFAULT_SOCKET_DIR;
+use users::get_current_uid;
 
 /// Returns the length for display for a `Result<Vec<_>>` value.
 ///
@@ -66,13 +65,10 @@ where
 
 /// Returns the socket path that should be used for client communication.
 pub fn get_socket_path() -> String {
-    let mut socket_path = DEFAULT_SOCKET_DIR.to_owned() + "/secmon.sock";
-    if let Some(dir) = get_env_var::<String>("XDG_RUNTIME_DIR", None).unwrap() {
-        if !dir.ends_with("/0") {
-            // non-root
-            socket_path = dir + "/secmon.sock";
-        }
+    let uid = get_current_uid();
+    if uid == 0 {
+        return "/run/secmon.sock".to_owned();
+    } else {
+        return format!("/run/user/{uid}/secmon.sock");
     }
-
-    socket_path
 }
