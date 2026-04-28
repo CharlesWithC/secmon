@@ -7,7 +7,7 @@ mod models;
 mod node;
 mod traits;
 mod utils;
-use crate::models::{DEFAULT_HOST, DEFAULT_PORT, HubConfig, LaunchArgs, NodeConfig};
+use crate::models::{DEFAULT_IP, DEFAULT_PORT, HubConfig, LaunchArgs, NodeConfig};
 use crate::utils::{get_env_var_strict, get_socket_path};
 
 const USAGE: &str = "Usage:
@@ -24,7 +24,7 @@ Utility commands:
   <node> can be serial, address, hostname, or \"-\" for all connected nodes.
 
 Environment:
-  hub:      HOST=<host> PORT=<port> (default: 127.0.0.1:9992)
+  hub:      BIND_IP=<ip> BIND_PORT=<port> (default: 127.0.0.1:9992)
             DISCONNECT_GRACE_PERIOD=<number> (default: 30)
                 this controls when to remove a disconnected node
             ASSUME_HOSTNAME_UNIQUE=<true|false> (default: true)
@@ -85,8 +85,8 @@ fn main() {
 
     let launch_args = match args.get(1).unwrap().as_str() {
         "hub" => {
-            let ip = get_env_var_strict("HOST", Some(DEFAULT_HOST));
-            let port = get_env_var_strict("PORT", Some(DEFAULT_PORT));
+            let ip = get_env_var_strict("BIND_IP", Some(DEFAULT_IP));
+            let port = get_env_var_strict("BIND_PORT", Some(DEFAULT_PORT));
 
             let disconnect_grace_period = get_env_var_strict("DISCONNECT_GRACE_PERIOD", Some(30));
             let assume_hostname_unique = get_env_var_strict("ASSUME_HOSTNAME_UNIQUE", Some(true));
@@ -101,7 +101,7 @@ fn main() {
             )
         }
         "node" => {
-            let ip = get_env_var_strict("HUB_IP", Some(DEFAULT_HOST));
+            let ip = get_env_var_strict("HUB_IP", Some(DEFAULT_IP));
             let port = get_env_var_strict("HUB_PORT", Some(DEFAULT_PORT));
 
             let reconnect = args.contains(&"--reconnect".to_owned());
