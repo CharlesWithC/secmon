@@ -157,7 +157,7 @@ fn run_journalctl(
     if node_config.enable_auth_log {
         args.extend([
             "-t",
-            "-sshd", // old sshd identifier
+            "sshd", // old sshd identifier
             "-t",
             "sshd-session", // modern sshd identifier
             "-t",
