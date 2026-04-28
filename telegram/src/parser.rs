@@ -1,13 +1,15 @@
 use secmon::models::hub::Node;
 use secmon::models::node::{AuthLog, AuthLogDetail, NodeUpdate};
 
-/// Returns node update parsed in user-friendly string.
-pub fn parse_node_update(node: &Node, data: &NodeUpdate) -> String {
-    let mut result = String::new();
-
-    result += &format!("<b>{}</b> (<code>{}</code>)\n", node.hostname, node.address);
+/// Returns node update parsed in user-friendly format.
+///
+/// `None` result means that the update is not worth notifying the user.
+pub fn parse_node_update(node: &Node, data: &NodeUpdate) -> Option<String> {
+    let mut result = format!("<b>{}</b> (<code>{}</code>)\n", node.hostname, node.address);
+    let mut ok = false;
 
     if let Some(ref auth_log_res) = data.auth_log {
+        ok = true;
         match auth_log_res {
             Ok(AuthLog {
                 time: _,
@@ -48,9 +50,7 @@ pub fn parse_node_update(node: &Node, data: &NodeUpdate) -> String {
             },
             Err(e) => result += &format!("[ERROR] {e}"),
         }
-    } else {
-        result += &format!("{data}");
     }
 
-    result
+    if ok { Some(result) } else { None }
 }

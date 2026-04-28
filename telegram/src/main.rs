@@ -34,7 +34,9 @@ fn thread_node_update(send_message: impl Fn(String), nodes_mutex: &NodesMutex) -
                 match resp {
                     ClientResponse::NodeUpdate(serial, data) => {
                         let node = utils::find_node(serial, nodes_mutex, true)?;
-                        send_message(parser::parse_node_update(&node, &data));
+                        if let Some(text) = parser::parse_node_update(&node, &data) {
+                            send_message(text);
+                        }
                     }
                     _ => Err(anyhow!("Hub sent a response that is not NodeUpdate"))?, // should not happen
                 }
@@ -49,6 +51,7 @@ fn main() {
     let nodes_mutex = Arc::new(Mutex::new(Vec::<Node>::new()));
 
     // helper function to send message with `user_id` copied inside
+    let bot_clone = bot.clone();
     let user_id = get_env_var_strict::<i64>("TELEGRAM_USER_ID", None);
     let send_message = move |text: String| -> () {
         let send_message_params = SendMessageParams::builder()
@@ -56,7 +59,7 @@ fn main() {
             .text(text)
             .parse_mode(ParseMode::Html)
             .build();
-        let result = bot.send_message(&send_message_params);
+        let result = bot_clone.send_message(&send_message_params);
         if let Err(e) = result {
             println!("Failed to send message: {e}");
         }
