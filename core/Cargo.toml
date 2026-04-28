@@ -2,6 +2,7 @@
 name = "secmon"
 version = "1.0.0"
 edition = "2024"
+default-run = 'secmon'
 
 [dependencies]
 anyhow = "1.0.102"
