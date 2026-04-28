@@ -7,7 +7,9 @@ mod models;
 mod node;
 mod traits;
 mod utils;
-use crate::models::{DEFAULT_HOST, DEFAULT_PORT, DEFAULT_SOCKET_DIR, LaunchArgs, NodeConfig};
+use crate::models::{
+    DEFAULT_HOST, DEFAULT_PORT, DEFAULT_SOCKET_DIR, HubConfig, LaunchArgs, NodeConfig,
+};
 use crate::utils::{get_env_var, get_env_var_strict};
 
 const USAGE: &str = "Usage:
@@ -24,15 +26,20 @@ Utility commands:
   <node> can be address or hostname, or \"-\" for all connected nodes.
 
 Environment:
-  hub:      HOST=<host> PORT=<port>
-  node:     HUB_IP=<ip> HUB_PORT=<port>
-            COMMAND_ALLOWLIST_FILE=<path>
+  hub:      HOST=<host> PORT=<port> (default: 127.0.0.1:9992)
+            DISCONNECT_GRACE_PERIOD=<number> (default: 30)
+                this controls when to remove a disconnected node
+            ASSUME_HOSTNAME_UNIQUE=<true|false> (default: true)
+                when true, reconnected node would replace disconnected node
+                otherwise, reconnected node would be considered a new node
+  node:     HUB_IP=<ip> HUB_PORT=<port> (default: 127.0.0.1:9992)
+            COMMAND_ALLOWLIST_FILE=<path> (default: none)
 
 COMMAND_ALLOWLIST_FILE:
   A file containing commands that may be executed by hub.
   Separate label and command with '=', and provide one pair in each line.
   Label must not contain '=', and command must finish in one line.
-  Example:
+  Examples:
     LABEL=COMMAND
     update=apt update
     reboot=shutdown -r";
@@ -51,7 +58,7 @@ fn get_socket_path() -> String {
 
 fn launch(launch_args: LaunchArgs) -> Result<()> {
     match launch_args {
-        LaunchArgs::Hub(ip, port) => {
+        LaunchArgs::Hub(ip, port, hub_config) => {
             let socket_path = get_socket_path();
             if fs::exists(&socket_path)
                 .map_err(|e| anyhow!("Unable to access {socket_path}: {e}"))?
@@ -60,7 +67,7 @@ fn launch(launch_args: LaunchArgs) -> Result<()> {
                     .map_err(|e| anyhow!("Unable to unlink {socket_path}: {e}"))?;
             }
 
-            crate::hub::main_daemon(ip, port, socket_path)?;
+            crate::hub::main_daemon(hub_config, ip, port, socket_path)?;
         }
         LaunchArgs::Client(command) => {
             let socket_path = get_socket_path();
@@ -94,7 +101,18 @@ fn main() {
         "hub" => {
             let ip = get_env_var_strict("HOST", Some(DEFAULT_HOST));
             let port = get_env_var_strict("PORT", Some(DEFAULT_PORT));
-            LaunchArgs::Hub(ip, port)
+
+            let disconnect_grace_period = get_env_var_strict("DISCONNECT_GRACE_PERIOD", Some(30));
+            let assume_hostname_unique = get_env_var_strict("ASSUME_HOSTNAME_UNIQUE", Some(true));
+
+            LaunchArgs::Hub(
+                ip,
+                port,
+                HubConfig {
+                    disconnect_grace_period,
+                    assume_hostname_unique,
+                },
+            )
         }
         "node" => {
             let ip = get_env_var_strict("HUB_IP", Some(DEFAULT_HOST));

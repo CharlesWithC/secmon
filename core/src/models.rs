@@ -13,17 +13,9 @@ pub const DEFAULT_PORT: u16 = 9992;
 /// Default socket directory for hub <=> client
 pub const DEFAULT_SOCKET_DIR: &str = "/var/run/secmon";
 
-/// Grace period in seconds before removing a disconnected node
-pub const DISCONNECT_GRACE_PERIOD: u64 = 30;
-/// Whether to assume hostnames would be unique
-///
-/// If `true`, then
-///   - on node reconnect, node of same hostname would immediately replace disconnected node
-pub const ASSUME_HOSTNAME_UNIQUE: bool = true;
-
 /// Launch arguments
 pub enum LaunchArgs {
-    Hub(IpAddr, u16),
+    Hub(IpAddr, u16, HubConfig),
     Node(IpAddr, u16, NodeConfig),
     Client(String),
 }
@@ -31,7 +23,9 @@ pub enum LaunchArgs {
 impl fmt::Display for LaunchArgs {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::Hub(ip, port) => write!(f, "Hub(ip=\"{ip}\", port={port})"),
+            Self::Hub(ip, port, hub_config) => {
+                write!(f, "Hub(ip=\"{ip}\", port={port}, {hub_config})")
+            }
             Self::Node(ip, port, node_config) => {
                 write!(f, "Node(ip=\"{ip}\", port={port}, {node_config})")
             }
@@ -39,6 +33,23 @@ impl fmt::Display for LaunchArgs {
                 write!(f, "Client(command=\"{}\")", command)
             }
         }
+    }
+}
+
+// Hub configuration
+#[derive(Clone, Copy)]
+pub struct HubConfig {
+    pub disconnect_grace_period: u64,
+    pub assume_hostname_unique: bool,
+}
+
+impl fmt::Display for HubConfig {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "disconnect_grace_period={}, assume_hostname_unique={}",
+            self.disconnect_grace_period, self.assume_hostname_unique
+        )
     }
 }
 

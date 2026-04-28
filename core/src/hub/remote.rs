@@ -5,16 +5,17 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use crate::models::HubConfig;
 use crate::models::hub::{ChannelPacket, HubStateMutex, Node};
 use crate::models::node::{NodeDataError, NodeUpdate};
 use crate::models::packet::Response;
-use crate::models::{ASSUME_HOSTNAME_UNIQUE, DISCONNECT_GRACE_PERIOD};
 use crate::traits::iosered::IOSerialized;
 
 /// Initializes node connection.
 ///
 /// Returns `serial` of the node and `receiver` for local commands.
 fn handle_new_node(
+    hub_config: HubConfig,
     address: &SocketAddr,
     hostname: &String,
     hub_state: &HubStateMutex,
@@ -23,7 +24,7 @@ fn handle_new_node(
     let (ref mut counter, ref mut nodes, _) = *guard;
 
     // optionally remove possibly disconnected node of same hostname
-    if ASSUME_HOSTNAME_UNIQUE {
+    if hub_config.assume_hostname_unique {
         if let Some(index) = nodes
             .iter()
             .position(|(node, _)| node.hostname == *hostname)
@@ -79,6 +80,7 @@ fn broadcast_update(serial: u32, data: &NodeUpdate, hub_state: &HubStateMutex) -
 ///
 /// Returns new serial and command receiver if node cannot be recognized.
 fn update_hub_state(
+    hub_config: HubConfig,
     serial: u32,
     address: &SocketAddr,
     hostname: &String,
@@ -115,7 +117,7 @@ fn update_hub_state(
         None
     } else {
         eprintln!("{address} ({hostname}) is not a recognized node");
-        Some(handle_new_node(address, hostname, hub_state))
+        Some(handle_new_node(hub_config, address, hostname, hub_state))
     }
 }
 
@@ -137,7 +139,11 @@ fn handle_stream_close(serial: u32, hub_state: &HubStateMutex) -> () {
 /// Main thread function for remote node connection.
 ///
 /// This is a blocking function and does not exit unless interrupted.
-fn thread_main(mut stream: TcpStream, hub_state: &HubStateMutex) -> Result<()> {
+fn thread_main(
+    hub_config: HubConfig,
+    mut stream: TcpStream,
+    hub_state: &HubStateMutex,
+) -> Result<()> {
     let serial;
     let cmd_receiver;
     let address = stream.peer_addr().unwrap();
@@ -145,7 +151,7 @@ fn thread_main(mut stream: TcpStream, hub_state: &HubStateMutex) -> Result<()> {
 
     if let Response::Connect(_hostname) = stream.read::<Response>()? {
         hostname = _hostname;
-        (serial, cmd_receiver) = handle_new_node(&address, &hostname, hub_state);
+        (serial, cmd_receiver) = handle_new_node(hub_config, &address, &hostname, hub_state);
         println!("{address} ({hostname}) connected and was assigned serial {serial}");
     } else {
         return Err(anyhow::anyhow!(
@@ -202,7 +208,7 @@ fn thread_main(mut stream: TcpStream, hub_state: &HubStateMutex) -> Result<()> {
                     Response::Connect(_) => {} // should not occur
                     Response::NodeUpdate(data) => {
                         broadcast_update(serial, &data, &hub_state);
-                        update_hub_state(serial, &address, &hostname, data, &hub_state);
+                        update_hub_state(hub_config, serial, &address, &hostname, data, &hub_state);
                     }
                     response @ _ => {
                         // broadcast other response directly
@@ -222,7 +228,7 @@ fn thread_main(mut stream: TcpStream, hub_state: &HubStateMutex) -> Result<()> {
 /// Main function for handling incoming remote node connnections.
 ///
 /// This is a blocking function and does not exit unless interrupted.
-pub fn main(listener: TcpListener, hub_state: HubStateMutex) -> () {
+pub fn main(hub_config: HubConfig, listener: TcpListener, hub_state: HubStateMutex) -> () {
     for stream in listener.incoming() {
         match stream {
             Ok(stream) => {
@@ -231,7 +237,7 @@ pub fn main(listener: TcpListener, hub_state: HubStateMutex) -> () {
                 thread::spawn(move || {
                     let address = stream.peer_addr().unwrap();
 
-                    if let Err(e) = thread_main(stream, &hub_state) {
+                    if let Err(e) = thread_main(hub_config, stream, &hub_state) {
                         eprintln!("Error while handling remote connection ({address}): {e}");
                     }
 
@@ -245,7 +251,7 @@ pub fn main(listener: TcpListener, hub_state: HubStateMutex) -> () {
                     });
                     drop(guard); // explicitly drop guard to unlock mutex
 
-                    thread::sleep(Duration::from_secs(DISCONNECT_GRACE_PERIOD));
+                    thread::sleep(Duration::from_secs(hub_config.disconnect_grace_period));
 
                     // delete node from `hub_state` after grace period
                     let mut guard = hub_state.lock().unwrap();

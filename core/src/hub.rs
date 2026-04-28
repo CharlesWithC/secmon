@@ -4,6 +4,7 @@ use std::os::unix::net::{UnixListener, UnixStream};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
+use crate::models::HubConfig;
 use crate::models::hub::{ClientCommand, HubNodes, HubStateMutex, SubscribedClients};
 use crate::traits::iosered::IOSerialized;
 
@@ -21,7 +22,12 @@ mod remote;
 /// Hub daemon main function for handling remote node connections and local client commands.
 ///
 /// This is a blocking function and does not exit unless interrupted.
-pub fn main_daemon(ip: IpAddr, port: u16, socket_path: String) -> Result<()> {
+pub fn main_daemon(
+    hub_config: HubConfig,
+    ip: IpAddr,
+    port: u16,
+    socket_path: String,
+) -> Result<()> {
     let listener_local = UnixListener::bind(&socket_path)
         .map_err(|e| anyhow!("Unable to bind {socket_path}: {e}"))?;
     println!("Listening on {socket_path} for client commands");
@@ -41,7 +47,7 @@ pub fn main_daemon(ip: IpAddr, port: u16, socket_path: String) -> Result<()> {
 
         let hub_state_remote: HubStateMutex = Arc::clone(&hub_state);
         s.spawn(move || {
-            remote::main(listener_remote, hub_state_remote);
+            remote::main(hub_config, listener_remote, hub_state_remote);
         });
     });
 
