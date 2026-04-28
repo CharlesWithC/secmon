@@ -1,6 +1,7 @@
 use anyhow::{Result, anyhow};
 use frankenstein::client_ureq::Bot;
 use frankenstein::methods::SendMessageParams;
+use frankenstein::ureq;
 use frankenstein::{ParseMode, TelegramApi};
 use std::os::unix::net::UnixStream;
 use std::sync::{Arc, Mutex};
@@ -18,8 +19,23 @@ type NodesMutex = Arc<Mutex<Vec<Node>>>;
 
 /// Returns a `Bot` with static lifetime.
 fn build_bot() -> &'static Bot {
+    let mut config_builder = ureq::config::Config::builder()
+        .http_status_as_error(false)
+        .ip_family(ureq::config::IpFamily::Ipv4Only)
+        .timeout_global(Some(Duration::from_secs(500)));
+    if get_env_var_strict("IPV4_ONLY", Some(false)) {
+        println!("[NOTE] IPV4_ONLY is enabled");
+        config_builder = config_builder.ip_family(ureq::config::IpFamily::Ipv4Only)
+    }
+    let agent = ureq::Agent::new_with_config(config_builder.build());
+
     let token = get_env_var_strict::<String>("TELEGRAM_BOT_TOKEN", None);
-    let bot = Bot::new(token.as_str());
+
+    let bot = Bot::builder()
+        .api_url(format!("{}{token}", frankenstein::BASE_API_URL))
+        .request_agent(agent)
+        .build();
+
     Box::leak(Box::<Bot>::new(bot))
 }
 

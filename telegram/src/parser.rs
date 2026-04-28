@@ -19,17 +19,17 @@ pub fn parse_node_update(node: &Node, data: &NodeUpdate) -> Option<String> {
             }) => match detail {
                 AuthLogDetail::SshConnect((host, port), method) => {
                     result += &format!(
-                        "[SSH] <code>{user}</code> connected from <code>{host}:{port}</code> with {method}.\n"
+                        "[SSH] <code>{user}</code> connected from <code>{host}:{port}</code> using {method}.\n"
                     )
                 }
                 AuthLogDetail::SshFailPassword((host, port)) => {
                     result += &format!(
-                        "[SSH] FAILED password login attempt for <code>{user}</code> from <code>{host}:{port}</code>.\n"
+                        "[SSH] <b>FAILED</b> password login attempt for <code>{user}</code> from <code>{host}:{port}</code>.\n"
                     )
                 }
                 AuthLogDetail::SshDisconnect((host, port)) => {
                     result += &format!(
-                        "[SSH] Disconnected <code>{user}</code> from <code>{host}:{port}</code>.\n"
+                        "[SSH] <code>{user}</code> disconnected from <code>{host}:{port}</code>.\n"
                     )
                 }
                 AuthLogDetail::SuOpen(target) => {

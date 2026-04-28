@@ -8,4 +8,6 @@ This integration is currently under development.
 
 Configure environment variables `TELEGRAM_BOT_TOKEN` and `TELEGRAM_USER_ID`.
 
+Optionally, configure environment variable `IPV4_ONLY=true`, if there are IPv6 connectivity issues.
+
 Start the bot with `secmon-tg`.
