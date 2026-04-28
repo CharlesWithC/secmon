@@ -651,6 +651,7 @@ dependencies = [
  "paste",
  "postcard",
  "serde",
+ "shlex",
  "users",
 ]
 

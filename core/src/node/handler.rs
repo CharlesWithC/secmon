@@ -43,12 +43,17 @@ pub fn handle_command(
                     Ok(lines) => {
                         for line in lines.map_while(Result::ok) {
                             match line.split("=").collect::<Vec<_>>().as_slice() {
+                                #[rustfmt::skip]
                                 [line_label, line_command_parts @ ..] if label == line_label => {
                                     let line_command = line_command_parts.join("=");
-                                    let line_command_parts =
-                                        line_command.split_whitespace().collect::<Vec<_>>();
-                                    let mut command = process::Command::new(line_command_parts[0]);
-                                    command.args(line_command_parts[1..].to_vec());
+                                    let parts_res = shlex::split(line_command.as_str());
+                                    if let None = parts_res {
+                                        sw_s.send(Response::Result(false, format!("Failed to parse command for '{line_label}'")))?;
+                                        return Ok(());
+                                    }
+                                    let parts = parts_res.unwrap();
+                                    let mut command = process::Command::new(parts[0].as_str());
+                                    command.args(parts[1..].to_vec());
                                     let result = command.run();
                                     sw_s.send(match result {
                                         Ok(output) => Response::Result(true, output),
