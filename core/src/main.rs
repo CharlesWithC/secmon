@@ -11,8 +11,8 @@ use crate::models::{DEFAULT_HOST, DEFAULT_PORT, HubConfig, LaunchArgs, NodeConfi
 use crate::utils::{get_env_var_strict, get_socket_path};
 
 const USAGE: &str = "Usage:
-  secmon hub                        launch hub server
-  secmon node [who] [wg] [auth]     launch node server
+  secmon hub                        launch hub daemon
+  secmon node [who] [wg] [auth]     launch node daemon
     [--reconnect]
   secmon help                       print this help message
 

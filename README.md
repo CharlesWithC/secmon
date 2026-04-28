@@ -26,21 +26,11 @@ Client 2 <-----------| |-----------> Node 2
 - communicates with hub via unix socket, and so must run on the same server as hub
 - allows integration to be built based on the custom protocol; the cli client is a minimal viable implementation
 
-## Basic Usage
+## Modules
 
-Start `hub` server with `secmon hub`.
+Core \[[README](/core/README.md)\]: The core `hub` and `node` daemon, plus a minimal viable implementation of cli client.
 
-Start `node` server with `secmon node [who] [wg] [auth] [--reconnect]`.
-
-- `[who]` `[wg]` `[auth]` selects the resources to monitor.
-
-The following commands can be used on the `hub` server:
-
-- `secmon list [sorted]`: list all connected (and recently disconnected) nodes
-- `secmon subscribe`: subscribe to node updates - mostly for debug purpose, or if you want to watch terminal print things
-- `secmon <node> execute <label>`: execute an allowed command on one/several node(s)
-
-See `secmon help` for detailed information on using the program.
+Telegram \[[README](/telegram/README.md)\]: Telegram bot integration for single-user control and updates.
 
 ## The Philosophy (Data Monitored)
 
@@ -51,11 +41,3 @@ This design aligns with the principle of this project of being a "monitor" rathe
 `who` and `wg` data are stored because they are polled and thus must be stored to compare changes. The "storage" is a by-product of polling, despite the data turning out to be interesting to be stored for efficient fetching/displaying in cli client.
 
 `auth` (log) data is inherently "ephemeral" - it is hard to track the exact state of current sessions by reading log (technically, it is possible, but building such state is too fragile compared with using the stable data printed by `who` or `wg`). Also, it is much more interesting to subscribe to such data for updates and ping the terminal client when a login occurs, than to, say, "view last 10 successful logins".
-
-## Notes
-
-`hub` does not monitor its own resources, and so a separate `node` should be launched on the same server as `hub`.
-
-Nodes check `who` and `wg` every second, and watch for changes on `auth` with `journalctl -f`, and update `hub` atomically once something changes.
-
-All communication occurs in unencrypted tcp streams, as a trusted network is assumed.
