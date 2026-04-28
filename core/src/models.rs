@@ -37,6 +37,7 @@ impl fmt::Display for LaunchArgs {
 // Hub configuration
 #[derive(Clone, Copy)]
 pub struct HubConfig {
+    pub remote_exec_timeout: u64,
     pub disconnect_grace_period: u64,
     pub assume_hostname_unique: bool,
 }

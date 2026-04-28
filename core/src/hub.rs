@@ -42,7 +42,7 @@ pub fn main_daemon(
     thread::scope(|s| {
         let hub_state_local: HubStateMutex = Arc::clone(&hub_state);
         s.spawn(move || {
-            local::main(listener_local, hub_state_local);
+            local::main(hub_config, listener_local, hub_state_local);
         });
 
         let hub_state_remote: HubStateMutex = Arc::clone(&hub_state);
@@ -66,8 +66,6 @@ pub fn main_client(socket_path: String, command: String) -> Result<()> {
             stream.write(&ClientCommand::Quit)?; // quit to close connection gracefully
             result // propaget result
         }
-        Err(e) => Err(anyhow!(
-            "Unable to connect to hub daemon: {e}"
-        )),
+        Err(e) => Err(anyhow!("Unable to connect to hub daemon: {e}")),
     }
 }

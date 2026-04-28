@@ -3,7 +3,9 @@ use crossbeam_channel::unbounded;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::sync::Arc;
 use std::thread;
+use std::time::Duration;
 
+use crate::models::HubConfig;
 use crate::models::hub::{ClientCommand, ClientResponse, HubStateMutex};
 use crate::models::node::NodeUpdate;
 use crate::models::packet::Response;
@@ -12,7 +14,11 @@ use crate::traits::iosered::IOSerialized;
 /// Handles local client command.
 ///
 /// Returns the result of executing the command.
-fn handle_command(command: ClientCommand, hub_state: &HubStateMutex) -> ClientResponse {
+fn handle_command(
+    hub_config: HubConfig,
+    command: ClientCommand,
+    hub_state: &HubStateMutex,
+) -> ClientResponse {
     match command {
         ClientCommand::List => {
             let guard = hub_state.lock().unwrap();
@@ -46,7 +52,8 @@ fn handle_command(command: ClientCommand, hub_state: &HubStateMutex) -> ClientRe
                     return ClientResponse::Failure(format!("{e}"));
                 }
                 drop(guard); // unlock mutex while waiting for response
-                let resp_res = resp_r.recv();
+                let resp_res =
+                    resp_r.recv_timeout(Duration::from_secs(hub_config.remote_exec_timeout));
                 match resp_res {
                     Ok(resp) => ClientResponse::RawResponse(resp),
                     Err(e) => ClientResponse::Failure(format!("{e}")),
@@ -82,7 +89,11 @@ fn handle_subscribe(mut stream: UnixStream, hub_state: &HubStateMutex) -> Result
 /// Main thread function for local client connection.
 ///
 /// This is a blocking function and does not exit unless interrupted.
-fn thread_main(mut stream: UnixStream, hub_state: HubStateMutex) -> Result<()> {
+fn thread_main(
+    hub_config: HubConfig,
+    mut stream: UnixStream,
+    hub_state: HubStateMutex,
+) -> Result<()> {
     loop {
         let command = stream.read::<ClientCommand>()?;
         println!("Received {command}");
@@ -96,7 +107,7 @@ fn thread_main(mut stream: UnixStream, hub_state: HubStateMutex) -> Result<()> {
                 return Ok(());
             }
             command @ _ => {
-                let result = handle_command(command, &hub_state);
+                let result = handle_command(hub_config, command, &hub_state);
                 stream.write(&result)?
             }
         }
@@ -106,14 +117,14 @@ fn thread_main(mut stream: UnixStream, hub_state: HubStateMutex) -> Result<()> {
 /// Main function for handling incoming local client connections.
 ///
 /// This is a blocking function and does not exit unless interrupted.
-pub fn main(listener: UnixListener, hub_state: HubStateMutex) -> () {
+pub fn main(hub_config: HubConfig, listener: UnixListener, hub_state: HubStateMutex) -> () {
     for stream in listener.incoming() {
         match stream {
             Ok(stream) => {
                 let hub_state: HubStateMutex = Arc::clone(&hub_state);
 
                 thread::spawn(move || {
-                    if let Err(e) = thread_main(stream, hub_state) {
+                    if let Err(e) = thread_main(hub_config, stream, hub_state) {
                         eprintln!("Error while handling local connection: {e}");
                     }
                 });
