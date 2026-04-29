@@ -5,8 +5,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 use crate::models::HubConfig;
-use crate::models::hub::{ClientCommand, HubNodes, HubStateMutex, SubscribedClients};
-use crate::traits::iosered::IOSerialized;
+use crate::models::hub::{HubNodes, HubStateMutex, SubscribedClients};
 
 mod client;
 mod local;
@@ -42,7 +41,7 @@ pub fn main_daemon(
     thread::scope(|s| {
         let hub_state_local: HubStateMutex = Arc::clone(&hub_state);
         s.spawn(move || {
-            local::main(hub_config, listener_local, hub_state_local);
+            local::main(listener_local, hub_state_local);
         });
 
         let hub_state_remote: HubStateMutex = Arc::clone(&hub_state);
@@ -61,11 +60,7 @@ pub fn main_daemon(
 /// This may be a blocking function depending on the command.
 pub fn main_client(socket_path: String, command: String) -> Result<()> {
     match UnixStream::connect(socket_path) {
-        Ok(ref mut stream) => {
-            let result = client::main(stream, command);
-            stream.write(&ClientCommand::Quit)?; // quit to close connection gracefully
-            result // propaget result
-        }
+        Ok(ref mut stream) => client::main(stream, command),
         Err(e) => Err(anyhow!("Unable to connect to hub daemon: {e}")),
     }
 }

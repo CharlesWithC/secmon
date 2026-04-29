@@ -26,8 +26,6 @@ Utility commands:
 
 Environment:
   hub:      BIND_IP=<ip> BIND_PORT=<port>       (default: 127.0.0.1:9992)
-            REMOTE_EXEC_TIMEOUT=<seconds>       (default: 300)
-                when to timeout a remote command execution
             DISCONNECT_GRACE_PERIOD=<seconds>   (default: 300)
                 when to remove a disconnected node, if not replaced
             ASSUME_HOSTNAME_UNIQUE=<true|false> (default: true)
@@ -35,6 +33,10 @@ Environment:
                 otherwise, reconnected node would be considered a new node
   node:     HUB_IP=<ip> HUB_PORT=<port>         (default: 127.0.0.1:9992)
             COMMAND_ALLOWLIST_FILE=<path>       (default: none)
+            COMMAND_EXECUTE_TIMEOUT=<seconds>   (default: 0 (disabled))
+                time to wait executing command before killing child process
+  client:   NODE_WAIT_TIMEOUT=<seconds>         (default: 0 (disabled))
+                time to wait forwarding command before aborting execution
 
 COMMAND_ALLOWLIST_FILE:
   A file containing commands that may be executed by hub.
@@ -91,7 +93,6 @@ fn main() {
             let ip = get_env_var_strict("BIND_IP", Some(DEFAULT_IP));
             let port = get_env_var_strict("BIND_PORT", Some(DEFAULT_PORT));
 
-            let remote_exec_timeout = get_env_var_strict("REMOTE_EXEC_TIMEOUT", Some(300));
             let disconnect_grace_period = get_env_var_strict("DISCONNECT_GRACE_PERIOD", Some(300));
             let assume_hostname_unique = get_env_var_strict("ASSUME_HOSTNAME_UNIQUE", Some(true));
 
@@ -99,7 +100,6 @@ fn main() {
                 ip,
                 port,
                 HubConfig {
-                    remote_exec_timeout,
                     disconnect_grace_period,
                     assume_hostname_unique,
                 },

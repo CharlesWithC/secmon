@@ -182,12 +182,20 @@ fn thread_main(
                     // because we send the commands in serial order, and the node would
                     // only respond in matching serial order
                     // that said, we won't receive a response that doesn't match command
-                    let (command, resp_sender) = cmd_receiver.recv()?;
+                    let (command, resp_sender, expire_time) = cmd_receiver.recv()?;
+                    if expire_time != UNIX_EPOCH && SystemTime::now() > expire_time {
+                        // ignore command if expired
+                        continue;
+                    }
                     sw.write(&command)?;
                     loop {
+                        // `sr_r.recv()` should not fail since `sr_s` is managed in this func
                         let resp = sr_r.recv()?;
+                        // we check if response is a streaming response
                         let is_streaming = crate::utils::is_streaming_response(&resp);
-                        resp_sender.send(resp)?;
+                        // ignore error; we must always send all response back (especially with streaming)
+                        // otherwise, if `resp_sender` fails, then response sequencing would corrupt
+                        let _ = resp_sender.send(resp);
                         if !is_streaming {
                             break;
                         }

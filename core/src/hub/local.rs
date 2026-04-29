@@ -3,9 +3,8 @@ use crossbeam_channel::unbounded;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::sync::Arc;
 use std::thread;
-use std::time::Duration;
+use std::time::SystemTime;
 
-use crate::models::HubConfig;
 use crate::models::hub::{ClientCommand, ClientResponse, HubStateMutex};
 use crate::models::node::NodeUpdate;
 use crate::models::packet::{Command, Response};
@@ -30,11 +29,12 @@ fn find_node(query: String, hub_state: &HubStateMutex) -> ClientResponse {
 }
 
 /// Handles forwarding a raw command to a given node, and relaying the node's response.
+///
+/// Note: Hub doesn't set expire time, or execute timeout for a command. These should be
+/// handled by client and node. Hub would only act as a data transporter.
 fn handle_raw_command(
-    hub_config: HubConfig,
     mut stream: &UnixStream,
-    serial: u32,
-    command: Command,
+    (serial, command, expire_time): (u32, Command, SystemTime),
     hub_state: &HubStateMutex,
 ) -> Result<()> {
     let guard = hub_state.lock().unwrap();
@@ -42,26 +42,18 @@ fn handle_raw_command(
 
     if let Some((_, sender)) = nodes.iter().find(|(node, _)| node.serial == serial) {
         let (resp_s, resp_r) = unbounded::<Response>();
-        if let Err(e) = sender.send((command, resp_s)) {
+        if let Err(e) = sender.send((command, resp_s, expire_time)) {
             stream.write(&ClientResponse::Failure(format!("{e}")))?;
             return Ok(());
         }
-        drop(guard); // unlock mutex while waiting for response
+        drop(guard);
 
         loop {
-            let resp_res = resp_r.recv_timeout(Duration::from_secs(hub_config.remote_exec_timeout));
-
-            match resp_res {
-                Ok(resp) => {
-                    let is_streaming = crate::utils::is_streaming_response(&resp);
-                    stream.write(&ClientResponse::RawResponse(resp))?;
-                    if !is_streaming {
-                        break;
-                    }
-                }
-                Err(e) => {
-                    stream.write(&ClientResponse::Failure(format!("{e}")))?;
-                }
+            let resp = resp_r.recv()?;
+            let is_streaming = crate::utils::is_streaming_response(&resp);
+            stream.write(&ClientResponse::RawResponse(resp))?;
+            if !is_streaming {
+                break;
             }
         }
     } else {
@@ -76,11 +68,7 @@ fn handle_raw_command(
 /// Main thread function for a single local client connection.
 ///
 /// This is a blocking function and does not exit unless interrupted.
-fn thread_main(
-    hub_config: HubConfig,
-    mut stream: UnixStream,
-    hub_state: HubStateMutex,
-) -> Result<()> {
+fn thread_main(mut stream: UnixStream, hub_state: HubStateMutex) -> Result<()> {
     loop {
         let command = stream.read::<ClientCommand>()?;
         println!("Received {command}");
@@ -113,11 +101,8 @@ fn thread_main(
                 let resp = find_node(query, &hub_state);
                 stream.write(&resp)?;
             }
-            ClientCommand::RawCommand(serial, command) => {
-                handle_raw_command(hub_config, &stream, serial, command, &hub_state)?;
-            }
-            ClientCommand::Quit => {
-                return Ok(());
+            ClientCommand::RawCommand(serial, command, expire_time) => {
+                handle_raw_command(&stream, (serial, command, expire_time), &hub_state)?;
             }
         }
     }
@@ -126,14 +111,14 @@ fn thread_main(
 /// Main function listening for incoming local client connections.
 ///
 /// This is a blocking function and does not exit unless interrupted.
-pub fn main(hub_config: HubConfig, listener: UnixListener, hub_state: HubStateMutex) -> () {
+pub fn main(listener: UnixListener, hub_state: HubStateMutex) -> () {
     for stream in listener.incoming() {
         match stream {
             Ok(stream) => {
                 let hub_state: HubStateMutex = Arc::clone(&hub_state);
 
                 thread::spawn(move || {
-                    if let Err(e) = thread_main(hub_config, stream, hub_state) {
+                    if let Err(e) = thread_main(stream, hub_state) {
                         eprintln!("Error while handling local connection: {e}");
                     }
                 });

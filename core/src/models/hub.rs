@@ -13,15 +13,17 @@ use crate::utils::get_display_len;
 
 type ErrorMessage = String;
 
-/// Represents data sent in internal channel between command and node handler.
+/// Represents command sent in channel between local command and remote node handler.
 ///
-/// The `Sender<Response>` is a one-time channel for node handler to return response to.
+/// `Sender<Response>` is a one-time channel for node handler to return response to.
+/// 
+/// `ExpireTime` decides past what time should a channel packet be ignored.
 ///
 /// This is as if sending a mail with a return envelop attached.
-pub type ChannelPacket = (Command, Sender<Response>);
+pub type ChannelPacket = (Command, Sender<Response>, ExpireTime);
 /// Represents a vector of connected nodes.
 ///
-/// The `Sender<ChannelPacket>` is a long-living channel to send local commands to.
+/// `Sender<ChannelPacket>` is a long-living channel to send local commands to.
 ///
 /// This is as if telling someone your mail carrier's name who would deliver mails to you.
 pub type HubNodes = Vec<(Node, Sender<ChannelPacket>)>;
@@ -87,14 +89,14 @@ pub enum ClientCommand {
     FindNode(String),
 
     /// Wraps a raw packet command
-    RawCommand(Serial, Command),
-
-    /// Close connection
-    Quit,
+    RawCommand(Serial, Command, ExpireTime),
 }
 
 /// Serial number of a node
 pub type Serial = u32;
+/// Expire time of a raw command, after which the command
+/// should be ignored if not yet forwarded to node
+pub type ExpireTime = SystemTime;
 
 impl fmt::Display for ClientCommand {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -104,13 +106,13 @@ impl fmt::Display for ClientCommand {
             Self::FindNode(query) => {
                 write!(f, "ClientCommand::FindNode(query=\"{query}\")")
             }
-            Self::RawCommand(serial, command) => {
+            Self::RawCommand(serial, command, expire_time) => {
+                let expire_time_dt: DateTime<Utc> = (*expire_time).into();
                 write!(
                     f,
-                    "ClientCommand::RawCommand(serial={serial}, command={command})"
+                    "ClientCommand::RawCommand(serial={serial}, command={command}, expire_time=\"{expire_time_dt}\")"
                 )
             }
-            Self::Quit => write!(f, "ClientCommand::Quit"),
         }
     }
 }

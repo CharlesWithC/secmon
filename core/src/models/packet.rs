@@ -72,6 +72,7 @@ pub enum Response {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum ResultStatus {
     Pending,
+    Timeout,
     Success,
     Failure,
 }
@@ -80,6 +81,7 @@ impl fmt::Display for ResultStatus {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::Pending => write!(f, "pending"),
+            Self::Timeout => write!(f, "timeout"),
             Self::Success => write!(f, "success"),
             Self::Failure => write!(f, "failure"),
         }

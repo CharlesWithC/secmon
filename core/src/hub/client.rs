@@ -3,11 +3,13 @@ use chrono::DateTime;
 use chrono::offset::Local;
 use colored::Colorize;
 use std::os::unix::net::UnixStream;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::models::hub::{ClientCommand, ClientResponse, Node};
 use crate::models::node::NodeDataError;
 use crate::models::packet::{Command, Response, ResultStatus};
 use crate::traits::iosered::IOSerialized;
+use crate::utils::get_env_var_strict;
 
 macro_rules! match_strict {
     ( $response:expr, $pattern:pat, $return:expr ) => {
@@ -122,35 +124,77 @@ fn print_node_list(nodes: Vec<Node>) -> () {
 
 /// Executes command on a specific node and streams result.
 fn exec_command(stream: &mut UnixStream, node: Node, command: Command) -> Result<()> {
+    let mut wait_timeout = get_env_var_strict("NODE_WAIT_TIMEOUT", Some(0));
+    let expire_time = match wait_timeout {
+        0 => UNIX_EPOCH,
+        _ => SystemTime::now() + Duration::from_secs(wait_timeout),
+    };
+
     println!(
         "{} ({})",
         node.address.to_string().bold().cyan(),
         node.hostname.bold().cyan()
     );
-    stream.write(&ClientCommand::RawCommand(node.serial, command))?;
+    stream.write(&ClientCommand::RawCommand(
+        node.serial,
+        command,
+        expire_time,
+    ))?;
+
+    if wait_timeout != 0 {
+        // set a read timeout if wait_timeout is enabled
+        // hub would ignore command when command is expired
+        // (add a little grace period here to ensure the relative read timeout
+        //  is past the absolute command timeout sent to hub)
+        stream.set_read_timeout(Some(
+            Duration::from_secs(wait_timeout) + Duration::from_millis(100),
+        ))?;
+    }
 
     loop {
-        let resp = stream.read::<ClientResponse>()?;
-        let raw_resp = match_strict!(resp, ClientResponse::RawResponse(raw_resp), raw_resp);
-        match raw_resp {
-            Response::ResultStream(status, line) => match status {
-                ResultStatus::Pending => {
-                    println!("{line}");
+        let result = stream.read::<ClientResponse>();
+
+        match result {
+            Ok(resp) => {
+                if wait_timeout != 0 {
+                    // once first response is received, wait timeout no longer applies
+                    stream.set_read_timeout(None)?;
+                    wait_timeout = 0;
                 }
-                ResultStatus::Success => {
-                    println!("Done: {}", "Success".green().bold());
+
+                let raw_resp = match_strict!(resp, ClientResponse::RawResponse(raw_resp), raw_resp);
+                // use centralized streaming response detection to ensure consistency
+                let is_streaming = crate::utils::is_streaming_response(&raw_resp);
+                match raw_resp {
+                    Response::ResultStream(status, line) => match status {
+                        ResultStatus::Pending => {
+                            println!("{line}");
+                        }
+                        ResultStatus::Timeout => {
+                            println!("{}: {}", "Done".bold(), "Timeout (Exec)".yellow().bold());
+                        }
+                        ResultStatus::Success => {
+                            println!("{}: {}", "Done".bold(), "Success".green().bold());
+                        }
+                        ResultStatus::Failure => {
+                            println!("{}: {}", "Done".bold(), "Failure".red().bold());
+                        }
+                    },
+                    _ => {
+                        // return immediately on invalid response
+                        eprintln!("Invalid node response: {raw_resp}");
+                        return Ok(());
+                    }
+                }
+                if !is_streaming {
                     return Ok(());
                 }
-                ResultStatus::Failure => {
-                    println!("Done: {}", "Failure".red().bold());
-                    return Ok(());
-                }
-            },
-            _ => {
-                // return immediately on invalid response
-                eprintln!("Invalid node response: {raw_resp}");
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                println!("{}: {}", "Done".bold(), "Timeout (Wait)".yellow().bold());
                 return Ok(());
             }
+            Err(e) => Err(e)?,
         }
     }
 }

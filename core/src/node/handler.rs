@@ -3,12 +3,14 @@ use crossbeam_channel::Sender;
 use std::io::{BufRead, BufReader, Read};
 use std::process;
 use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::Duration;
 
 use crate::models::NodeConfig;
 use crate::models::node::{NodeDataError, NodeStateMutex, NodeUpdate};
 use crate::models::packet::{Command, Response, ResultStatus};
-use crate::traits::exec::Exec;
-use crate::utils::{get_env_var, read_lines};
+use crate::traits::exec::{ChildWait, CommandExec};
+use crate::utils::{get_env_var, get_env_var_strict, read_lines};
 
 /// Handles raw command execution.
 fn handle_exec_command(
@@ -16,32 +18,76 @@ fn handle_exec_command(
     command: process::Command,
     stream: bool,
 ) -> Result<()> {
+    let program = command.get_program().to_str().unwrap().to_owned();
+    let timeout_sec = get_env_var_strict("COMMAND_EXECUTE_TIMEOUT", Some(0));
+    let timeout = match timeout_sec {
+        0 => None,
+        _ => Some(Duration::from_secs(timeout_sec)),
+    };
+
     if !stream {
-        let result = command.run();
+        // `command.run` nicely abstracts child process and timeout handling
+        let result = command.run(timeout);
         sw_s.send(match result {
             Ok(output) => Response::Result(true, output),
             Err(error) => Response::Result(false, error),
         })?;
     } else {
-        match command.stream() {
-            Ok((child, reader)) => {
-                let buf_reader = BufReader::new(reader);
-
-                for line in buf_reader.lines().map_while(Result::ok) {
-                    sw_s.send(Response::ResultStream(ResultStatus::Pending, line))?;
-                }
-
-                let output = child.wait_with_output()?;
+        macro_rules! stream_failure {
+            ( $sw_s:expr, $msg:expr ) => {{
+                sw_s.send(Response::ResultStream(ResultStatus::Pending, $msg))?;
                 sw_s.send(Response::ResultStream(
-                    if output.status.success() {
-                        ResultStatus::Success
-                    } else {
-                        ResultStatus::Failure
-                    },
+                    ResultStatus::Failure,
                     String::from(""),
                 ))?;
+            }};
+        }
+
+        match command.stream() {
+            Ok((mut child, reader)) => {
+                // we handle child process and reader in the raw way for streaming
+                // thread is used to read output so we can wait for child (possibly with timeout)
+                // the architecture is highly similar to `command.run`
+                let t_sw_s = sw_s.clone();
+                let t = thread::spawn(move || -> Result<()> {
+                    let buf_reader = BufReader::new(reader);
+
+                    for line in buf_reader.lines().map_while(Result::ok) {
+                        t_sw_s.send(Response::ResultStream(ResultStatus::Pending, line))?;
+                    }
+
+                    Ok(())
+                });
+
+                let result = child.wait_timeout(timeout);
+
+                // note: it is possible that stream breaks before child exits, such as
+                //       when the connection is broken; we still wait for child to finish
+                //       before accepting next command; thus, only one child process for
+                //       commands may be spawned at a time
+
+                t.join().unwrap()?; // wait for thread to complete
+
+                match result {
+                    Ok((timeout_kill, status)) => match timeout_kill {
+                        true => sw_s.send(Response::ResultStream(
+                            ResultStatus::Timeout,
+                            String::from(""),
+                        ))?,
+                        false => sw_s.send(Response::ResultStream(
+                            match status.success() {
+                                true => ResultStatus::Success,
+                                false => ResultStatus::Failure,
+                            },
+                            String::from(""),
+                        ))?,
+                    },
+                    Err(e) => {
+                        stream_failure!(sw_s, format!("Failed to wait for '{program}': {e}"));
+                    }
+                }
             }
-            Err(e) => sw_s.send(Response::Result(false, e))?,
+            Err(e) => stream_failure!(sw_s, format!("Failed to spawn '{program}': {e}")),
         }
     }
     Ok(())
