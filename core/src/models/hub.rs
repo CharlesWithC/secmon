@@ -37,7 +37,7 @@ pub type HubState = (u32, HubNodes, SubscribedClients); // (counter, nodes, subs
 pub type HubStateMutex = Arc<Mutex<HubState>>;
 
 /// Instance of a node
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Node {
     /// Serial number of node
     pub serial: u32,
@@ -72,7 +72,7 @@ impl fmt::Display for Node {
 }
 
 /// Command sent from client to hub
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum ClientCommand {
     /// Subscribe to node state updates
     ///
@@ -116,7 +116,7 @@ impl fmt::Display for ClientCommand {
 }
 
 /// Result of processing a client command
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum ClientResponse {
     /// Node state update, including tracked but not stored state
     NodeUpdate(u32, NodeUpdate),

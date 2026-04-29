@@ -9,7 +9,7 @@ use std::time::SystemTime;
 use crate::utils::get_display_len;
 
 /// Error info for an attribute of node data
-#[derive(Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub enum NodeDataError {
     /// Hub has not received the first update from node
     Initializing,
@@ -34,7 +34,7 @@ impl fmt::Display for NodeDataError {
 }
 
 /// Full tracked and stored state of a node, excluding state that is not stored
-#[derive(Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct NodeState {
     pub sessions: Sessions,
     pub wg_peers: WgPeers,
@@ -54,7 +54,7 @@ impl fmt::Display for NodeState {
 }
 
 /// Atomic update from node on tracked state, including state that is not stored
-#[derive(Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct NodeUpdate {
     pub sessions: Option<Sessions>,
     pub wg_peers: Option<WgPeers>,
@@ -84,7 +84,7 @@ impl fmt::Display for NodeUpdate {
 }
 
 /// User session (stored state)
-#[derive(Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct Session {
     /// Name of user relevant to the session
     pub user: String,
@@ -112,7 +112,7 @@ impl fmt::Display for Session {
 }
 
 /// WireGuard peer (stored state)
-#[derive(Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct WgPeer {
     /// WireGuard interface
     pub interface: String,
@@ -146,7 +146,7 @@ impl fmt::Display for WgPeer {
 }
 
 /// Auth log entry (tracked-only; not stored)
-#[derive(Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct AuthLog {
     /// Time of the entry
     pub time: SystemTime,
@@ -174,7 +174,7 @@ impl fmt::Display for AuthLog {
 }
 
 /// Detail of auth log entry
-#[derive(Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub enum AuthLogDetail {
     /// SSH connection started
     ///

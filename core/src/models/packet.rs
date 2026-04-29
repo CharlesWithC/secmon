@@ -4,7 +4,7 @@ use std::fmt;
 use crate::models::node::{NodeState, NodeUpdate};
 
 /// Command sent from hub to node
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum Command {
     /// Request current node state
     NodeState,
@@ -36,7 +36,7 @@ impl fmt::Display for Command {
 }
 
 /// Response sent from node to hub
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum Response {
     /// `KeepAlive` acknowledgement
     KeepAlive,
@@ -69,7 +69,7 @@ pub enum Response {
 }
 
 /// Status of a streamed result
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum ResultStatus {
     Pending,
     Success,

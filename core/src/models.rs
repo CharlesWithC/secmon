@@ -35,7 +35,7 @@ impl fmt::Display for LaunchArgs {
 }
 
 // Hub configuration
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct HubConfig {
     pub remote_exec_timeout: u64,
     pub disconnect_grace_period: u64,
@@ -53,7 +53,7 @@ impl fmt::Display for HubConfig {
 }
 
 /// Node configuration
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct NodeConfig {
     pub reconnect: bool,
     pub enable_sessions: bool,
