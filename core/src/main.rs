@@ -17,17 +17,17 @@ const USAGE: &str = "Usage:
   secmon help                       print this help message
 
 Utility commands:
-  secmon list [sorted]              list all connected nodes
   secmon subscribe                  subscribe to node state atomic updates
-  secmon <node> execute <label>     execute a preconfigured allowed command
+  secmon list [sorted]              list all connected nodes
+  secmon <node> execute <label>     execute an allowed command
 
   <node> can be serial, address, hostname, or \"-\" for all connected nodes.
 
 Environment:
   hub:      BIND_IP=<ip> BIND_PORT=<port>       (default: 127.0.0.1:9992)
-            REMOTE_EXEC_TIMEOUT=<seconds>       (default: 30)
+            REMOTE_EXEC_TIMEOUT=<seconds>       (default: 300)
                 when to timeout a remote command execution
-            DISCONNECT_GRACE_PERIOD=<seconds>   (default: 30)
+            DISCONNECT_GRACE_PERIOD=<seconds>   (default: 300)
                 when to remove a disconnected node, if not replaced
             ASSUME_HOSTNAME_UNIQUE=<true|false> (default: true)
                 if true, reconnected node would replace disconnected node
@@ -90,8 +90,8 @@ fn main() {
             let ip = get_env_var_strict("BIND_IP", Some(DEFAULT_IP));
             let port = get_env_var_strict("BIND_PORT", Some(DEFAULT_PORT));
 
-            let remote_exec_timeout = get_env_var_strict("REMOTE_EXEC_TIMEOUT", Some(30));
-            let disconnect_grace_period = get_env_var_strict("DISCONNECT_GRACE_PERIOD", Some(30));
+            let remote_exec_timeout = get_env_var_strict("REMOTE_EXEC_TIMEOUT", Some(300));
+            let disconnect_grace_period = get_env_var_strict("DISCONNECT_GRACE_PERIOD", Some(300));
             let assume_hostname_unique = get_env_var_strict("ASSUME_HOSTNAME_UNIQUE", Some(true));
 
             LaunchArgs::Hub(

@@ -10,6 +10,14 @@ pub enum Command {
     NodeState,
 
     /// Execute a preconfigured allowed command
+    ///
+    /// If `Stream=false`, then a single `Result` will be responded when command completes.
+    ///
+    /// If `Stream=true`, then `ResultStream` will be responded for each line of output, until
+    /// command completes and a non-pending status with empty line output is returned.
+    ///
+    /// `REMOTE_EXEC_TIMEOUT` applies to timeout waiting for a response - that is, for streamed
+    /// response, timeout will not occur as long as something is responded within timeout period.
     Execute(Label, Stream),
 }
 
@@ -48,10 +56,15 @@ pub enum Response {
     /// Note: This is sent automatically and may not be requested manually.
     NodeUpdate(NodeUpdate),
 
-    /// Generic result of a command
+    /// Full result of executing a command
+    ///
+    /// Note: The result is only returned when the command completes.
     Result(Success, Message),
 
-    /// Partial result from streaming
+    /// Partial result of executing a command
+    ///
+    /// Note: `ResultStatus` is `Pending` until the command completes, where
+    /// an empty `Line` along with either `Success` or `Failure` is returned.
     ResultStream(ResultStatus, Line),
 }
 

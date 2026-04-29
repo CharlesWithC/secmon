@@ -101,7 +101,7 @@ pub fn handle_command(
 
                                     return Ok(());
                                 }
-                                _ => {}
+                                _ => {} // don't care if no match
                             }
                         }
 
@@ -175,7 +175,7 @@ macro_rules! wait_child {
             Some(child) => {
                 let _ = child.wait();
             }
-            _ => {}
+            None => {}
         }
         *child_opt = None;
     };

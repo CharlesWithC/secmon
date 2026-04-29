@@ -158,7 +158,7 @@ pub fn main(ip: IpAddr, port: u16, node_config: NodeConfig) -> Result<()> {
                     Some(child) => {
                         let _ = child.kill();
                     }
-                    _ => {}
+                    None => {}
                 }
             }
 

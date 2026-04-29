@@ -5,6 +5,8 @@ use std::str::FromStr;
 use std::{env, process};
 use users::get_current_uid;
 
+use crate::models::packet::{Response, ResultStatus};
+
 /// Returns the length for display for a `Result<Vec<_>>` value.
 ///
 /// If the `Result` is an `Err`, then returns `-1`;
@@ -70,5 +72,19 @@ pub fn get_socket_path() -> String {
         return "/run/secmon.sock".to_owned();
     } else {
         return format!("/run/user/{uid}/secmon.sock");
+    }
+}
+
+/// Returns whether a hub-node response is a partial response that will have subsequent streaming response.
+pub fn is_streaming_response(response: &Response) -> bool {
+    // we don't use catch-all to ensure this method is updated when a new response is added
+    match response {
+        Response::ResultStream(ResultStatus::Pending, _) => true,
+        Response::ResultStream(_, _)
+        | Response::KeepAlive
+        | Response::Connect(_)
+        | Response::NodeState(_)
+        | Response::NodeUpdate(_)
+        | Response::Result(..) => false,
     }
 }

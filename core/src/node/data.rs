@@ -164,6 +164,6 @@ pub fn parse_journalctl_log(line: String) -> Result<Option<AuthLog>> {
                 user: String::from(""),
                 detail: AuthLogDetail::SuClose(target_user.to_owned()),
             })),
-        _ => Ok(None),
+        _ => Ok(None), // don't care if no match
     }
 }

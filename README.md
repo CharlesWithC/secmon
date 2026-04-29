@@ -1,6 +1,6 @@
 # SecMon
 
-An std-only high-performance tool for monitoring security data on multiple servers.
+An std-only high-performance tool for monitoring security attributes on multiple servers, plus executing commands remotely based on an allowlist.
 
 This is a mini distributed system experiment, where remote nodes communicates with hub, and hub communicates with terminal clients.
 
@@ -19,14 +19,14 @@ Client 2 <-----------| |-----------> Node 2
 `node` is the server being monitored, it:
 
 - collects data and updates hub atomically on changed data
-- responds to commands from hub, such as executing an allowed shell command
+- responds to commands from hub (possibly streaming result), such as executing an allowed shell command
 
 `client` is the terminal client, it:
 
 - communicates with hub via unix socket, and so must run on the same server as hub
 - allows integration to be built based on the custom protocol; the cli client is a minimal viable implementation
 
-## Modules
+## Packages
 
 Core \[[README](/core/README.md)\]: The core `hub` and `node` daemon, plus a minimal viable implementation of cli client.
 

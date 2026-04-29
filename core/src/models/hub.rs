@@ -74,14 +74,14 @@ impl fmt::Display for Node {
 /// Command sent from client to hub
 #[derive(Serialize, Deserialize, Clone)]
 pub enum ClientCommand {
-    /// List all connected nodes
-    List,
-
     /// Subscribe to node state updates
     ///
     /// Note: Client may not "unsubscribe". A separate
     /// connection should be used to send other commands.
     Subscribe,
+
+    /// List all connected nodes
+    List,
 
     /// Finds the first node matching address or hostname
     FindNode(String),
@@ -99,8 +99,8 @@ pub type Serial = u32;
 impl fmt::Display for ClientCommand {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::List => write!(f, "ClientCommand::List"),
             Self::Subscribe => write!(f, "ClientCommand::Subscribe"),
+            Self::List => write!(f, "ClientCommand::List"),
             Self::FindNode(query) => {
                 write!(f, "ClientCommand::FindNode(query=\"{query}\")")
             }
@@ -118,11 +118,11 @@ impl fmt::Display for ClientCommand {
 /// Result of processing a client command
 #[derive(Serialize, Deserialize, Clone)]
 pub enum ClientResponse {
-    /// A list of all connected nodes
-    List(Vec<Node>),
-
     /// Node state update, including tracked but not stored state
     NodeUpdate(u32, NodeUpdate),
+
+    /// A list of all connected nodes
+    List(Vec<Node>),
 
     /// A single node with its stored state
     Node(Node),
@@ -137,14 +137,14 @@ pub enum ClientResponse {
 impl fmt::Display for ClientResponse {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::List(nodes) => {
-                write!(f, "ClientResponse::List(nodes[{}])", nodes.len())
-            }
-            Self::Node(node) => write!(f, "ClientResponse::Node(node={node})"),
             Self::NodeUpdate(serial, update) => write!(
                 f,
                 "ClientResponse::NodeUpdate(serial={serial}, data={update})"
             ),
+            Self::List(nodes) => {
+                write!(f, "ClientResponse::List(nodes[{}])", nodes.len())
+            }
+            Self::Node(node) => write!(f, "ClientResponse::Node(node={node})"),
             Self::RawResponse(response) => {
                 write!(f, "ClientResponse::RawResponse(response={response})")
             }

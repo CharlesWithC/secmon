@@ -16,7 +16,7 @@ The following commands can be used on the `hub` server:
 
 - `secmon list [sorted]`: list all connected (and recently disconnected) nodes
 - `secmon subscribe`: subscribe to node updates - mostly for debug purpose, or if you want to watch terminal print things
-- `secmon <node> execute <label>`: execute an allowed command on one/several node(s)
+- `secmon <node> execute <label>`: execute an allowed command on one/several node(s) and stream output
 
 See `secmon help` for detailed information on using the program.
 
@@ -26,4 +26,4 @@ See `secmon help` for detailed information on using the program.
 
 Nodes check `who` and `wg` every second, and watch for changes on `auth` with `journalctl -f`, and update `hub` atomically once something changes.
 
-All communication occurs in unencrypted tcp streams, as a trusted network is assumed.
+All communication occurs in unencrypted tcp streams, as a trusted network is assumed. A secure tunnel should be used for communication over the Internet.

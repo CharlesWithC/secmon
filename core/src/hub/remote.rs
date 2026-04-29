@@ -8,7 +8,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use crate::models::HubConfig;
 use crate::models::hub::{ChannelPacket, HubStateMutex, Node};
 use crate::models::node::{NodeDataError, NodeUpdate};
-use crate::models::packet::{Response, ResultStatus};
+use crate::models::packet::Response;
 use crate::traits::iosered::IOSerialized;
 
 /// Initializes node connection.
@@ -137,7 +137,7 @@ fn handle_stream_close(serial: u32, hub_state: &HubStateMutex) -> () {
     // note: it's fine if we cannot find the node - that tells the old receiver is already dropped
 }
 
-/// Main thread function for remote node connection.
+/// Main thread function for a single remote node connection.
 ///
 /// This is a blocking function and does not exit unless interrupted.
 fn thread_main(
@@ -185,18 +185,11 @@ fn thread_main(
                     let (command, resp_sender) = cmd_receiver.recv()?;
                     sw.write(&command)?;
                     loop {
-                        let response = sr_r.recv()?;
-
-                        match response {
-                            Response::ResultStream(ResultStatus::Pending, _) => {
-                                // keep streaming response
-                                resp_sender.send(response)?;
-                            }
-                            _ => {
-                                // one-off response
-                                resp_sender.send(response)?;
-                                break;
-                            }
+                        let resp = sr_r.recv()?;
+                        let is_streaming = crate::utils::is_streaming_response(&resp);
+                        resp_sender.send(resp)?;
+                        if !is_streaming {
+                            break;
                         }
                     }
                 }
@@ -208,16 +201,16 @@ fn thread_main(
         // note: this is a blocking function that terminates on stream close
         let result = move || -> Result<()> {
             loop {
-                let response = stream.read::<Response>()?;
+                let resp = stream.read::<Response>()?;
 
-                match response {
+                match resp {
                     Response::KeepAlive | Response::Connect(_) => {}
                     _ => {
-                        println!("{address} ({hostname}) responded {response}");
+                        println!("{address} ({hostname}) responded {resp}");
                     }
                 }
 
-                match response {
+                match resp {
                     Response::KeepAlive => {}  // don't care
                     Response::Connect(_) => {} // should not occur
                     Response::NodeUpdate(data) => {
@@ -239,7 +232,7 @@ fn thread_main(
     })
 }
 
-/// Main function for handling incoming remote node connnections.
+/// Main function listening for incoming remote node connnections.
 ///
 /// This is a blocking function and does not exit unless interrupted.
 pub fn main(hub_config: HubConfig, listener: TcpListener, hub_state: HubStateMutex) -> () {

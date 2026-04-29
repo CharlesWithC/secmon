@@ -9,21 +9,118 @@ use crate::models::node::NodeDataError;
 use crate::models::packet::{Command, Response, ResultStatus};
 use crate::traits::iosered::IOSerialized;
 
+macro_rules! match_strict {
+    ( $response:expr, $pattern:pat, $return:expr ) => {
+        match $response {
+            $pattern => $return,
+            ClientResponse::Failure(e) => {
+                eprintln!("Failure: {}", e);
+                std::process::exit(1);
+            }
+            _ => {
+                panic!("invalid hub daemon response: {}", $response);
+            }
+        }
+    };
+}
+
 /// Sends `FindNode` command to hub daemon,
-/// returns `Node` if found; otherwise, raises an error.
+/// returns `Node` if found; otherwise, fail and exit.
 fn find_node(stream: &mut UnixStream, node: String) -> Result<Node> {
     stream.write(&ClientCommand::FindNode((*node).to_owned()))?;
     let resp = stream.read::<ClientResponse>()?;
-    match resp {
-        ClientResponse::Failure(error) => Err(anyhow!("Failure: {error}")),
-        ClientResponse::Node(node) => Ok(node),
-        _ => {
-            return Err(anyhow!("Hub daemon provided an invalid response: {resp}"));
+    match_strict!(resp, ClientResponse::Node(node), Ok(node))
+}
+
+/// Prints node list in a human-friendly format.
+fn print_node_list(nodes: Vec<Node>) -> () {
+    for (i, node) in nodes.iter().enumerate() {
+        if i != 0 {
+            println!("");
+        }
+
+        println!(
+            "{}: {} ({})",
+            "node".green().bold(),
+            node.hostname.green(),
+            if node.connected {
+                "connected".green()
+            } else {
+                "disconnected".red()
+            }
+        );
+        println!("  {}: {}", "serial".bold(), node.serial);
+        println!("  {}: {}", "address".bold(), node.address);
+        let last_state_update_dt: DateTime<Local> = node.last_state_update.into();
+        println!(
+            "  {}: {}",
+            "last state update".bold(),
+            last_state_update_dt.format("%F %T")
+        );
+
+        macro_rules! print_err {
+            ( $err:expr, $attr:expr ) => {
+                match $err {
+                    NodeDataError::Initializing => {
+                        println!("\n{}: Initializing", $attr.yellow().bold())
+                    }
+                    NodeDataError::NotMonitored => {} // no verbose on not monitored attributes
+                    NodeDataError::Message(msg) => {
+                        println!("\n{}: {msg}", $attr.yellow().bold())
+                    }
+                }
+            };
+        }
+
+        match &node.sessions {
+            Ok(sessions) => {
+                if sessions.len() > 0 {
+                    println!("\n{}:", "sessions".yellow().bold());
+                    let max_user_len = sessions
+                        .into_iter()
+                        .map(|session| session.user.len())
+                        .max()
+                        .unwrap_or(0);
+                    sessions.into_iter().for_each(|session| {
+                        let dt: DateTime<Local> = session.login.into();
+                        let from = if let Some(from) = &session.from {
+                            format!("({from})")
+                        } else {
+                            format!("(/)")
+                        };
+                        println!(
+                            "  {user: <user_width$}{login: <7}{from}",
+                            user = session.user,
+                            user_width = max_user_len + 2,
+                            login = dt.format("%H:%M"),
+                            from = from
+                        );
+                    })
+                }
+            }
+            Err(e) => print_err!(e, "sessions"),
+        }
+
+        match &node.wg_peers {
+            Ok(wg_peers) => wg_peers.into_iter().for_each(|wg_peer| {
+                println!("\n{}: {}", "wg peer".yellow().bold(), wg_peer.peer);
+                println!("  {}: {}", "interface".bold(), wg_peer.interface);
+                if let Some(endpoint) = &wg_peer.endpoint {
+                    println!("  {}: {}", "endpoint".bold(), endpoint);
+                }
+                if let Some(latest_handshake) = &wg_peer.latest_handshake {
+                    let dt: DateTime<Local> = (*latest_handshake).into();
+                    let parsed = format!("{}", dt.format("%F %T"));
+
+                    println!("  {}: {}", "latest handshake".bold(), parsed);
+                }
+            }),
+            Err(e) => print_err!(e, "wg peers"),
         }
     }
 }
 
-/// Executes command on a specific node and handles response.
+/// Executes command on a specific node and streams result.
 fn exec_command(stream: &mut UnixStream, node: Node, command: Command) -> Result<()> {
     println!(
         "{} ({})",
@@ -34,186 +131,55 @@ fn exec_command(stream: &mut UnixStream, node: Node, command: Command) -> Result
 
     loop {
         let resp = stream.read::<ClientResponse>()?;
-        match resp {
-            ClientResponse::RawResponse(resp) => match resp {
-                Response::ResultStream(status, line) => match status {
-                    ResultStatus::Pending => {
-                        println!("{line}");
-                    }
-                    ResultStatus::Success => {
-                        println!("Done: {}", "Success".green().bold());
-                        return Ok(());
-                    }
-                    ResultStatus::Failure => {
-                        println!("Done: {}", "Failure".red().bold());
-                        return Ok(());
-                    }
-                },
-                _ => handle_response(ClientResponse::RawResponse(resp))?,
+        let raw_resp = match_strict!(resp, ClientResponse::RawResponse(raw_resp), raw_resp);
+        match raw_resp {
+            Response::ResultStream(status, line) => match status {
+                ResultStatus::Pending => {
+                    println!("{line}");
+                }
+                ResultStatus::Success => {
+                    println!("Done: {}", "Success".green().bold());
+                    return Ok(());
+                }
+                ResultStatus::Failure => {
+                    println!("Done: {}", "Failure".red().bold());
+                    return Ok(());
+                }
             },
-            _ => handle_response(resp)?,
-        }
-    }
-}
-
-/// Handles response from hub.
-///
-/// That is, parses the response and prints it to terminal.
-fn handle_response(resp: ClientResponse) -> Result<()> {
-    match resp {
-        ClientResponse::List(nodes) => {
-            for (i, node) in nodes.iter().enumerate() {
-                if i != 0 {
-                    println!("");
-                }
-
-                println!(
-                    "{}: {} ({})",
-                    "node".green().bold(),
-                    node.hostname.green(),
-                    if node.connected {
-                        "connected".green()
-                    } else {
-                        "disconnected".red()
-                    }
-                );
-                println!("  {}: {}", "serial".bold(), node.serial);
-                println!("  {}: {}", "address".bold(), node.address);
-                let last_state_update_dt: DateTime<Local> = node.last_state_update.into();
-                println!(
-                    "  {}: {}",
-                    "last state update".bold(),
-                    last_state_update_dt.format("%F %T")
-                );
-
-                macro_rules! print_err {
-                    ( $err:expr, $attr:expr ) => {
-                        match $err {
-                            NodeDataError::Initializing => {
-                                println!("\n{}: Initializing", $attr.yellow().bold())
-                            }
-                            NodeDataError::Message(msg) => {
-                                println!("\n{}: {msg}", $attr.yellow().bold())
-                            }
-                            _ => {}
-                        }
-                    };
-                }
-
-                match &node.sessions {
-                    Ok(sessions) => {
-                        if sessions.len() > 0 {
-                            println!("\n{}:", "sessions".yellow().bold());
-                            let max_user_len = sessions
-                                .into_iter()
-                                .map(|session| session.user.len())
-                                .max()
-                                .unwrap_or(0);
-                            sessions.into_iter().for_each(|session| {
-                                let dt: DateTime<Local> = session.login.into();
-                                let from = if let Some(from) = &session.from {
-                                    format!("({from})")
-                                } else {
-                                    format!("(/)")
-                                };
-                                println!(
-                                    "  {user: <user_width$}{login: <7}{from}",
-                                    user = session.user,
-                                    user_width = max_user_len + 2,
-                                    login = dt.format("%H:%M"),
-                                    from = from
-                                );
-                            })
-                        }
-                    }
-                    Err(e) => print_err!(e, "sessions"),
-                }
-
-                match &node.wg_peers {
-                    Ok(wg_peers) => wg_peers.into_iter().for_each(|wg_peer| {
-                        println!("\n{}: {}", "wg peer".yellow().bold(), wg_peer.peer);
-                        println!("  {}: {}", "interface".bold(), wg_peer.interface);
-                        if let Some(endpoint) = &wg_peer.endpoint {
-                            println!("  {}: {}", "endpoint".bold(), endpoint);
-                        }
-                        if let Some(latest_handshake) = &wg_peer.latest_handshake {
-                            let dt: DateTime<Local> = (*latest_handshake).into();
-                            let parsed = format!("{}", dt.format("%F %T"));
-
-                            println!("  {}: {}", "latest handshake".bold(), parsed);
-                        }
-                    }),
-                    Err(e) => print_err!(e, "wg peers"),
-                }
+            _ => {
+                // return immediately on invalid response
+                eprintln!("Invalid node response: {raw_resp}");
+                return Ok(());
             }
-            Ok(())
         }
-        ClientResponse::NodeUpdate(..) => {
-            // minimal viable handling
-            // command-line subscribe is for debug purpose anyway
-            println!("{}", resp);
-            Ok(())
-        }
-        ClientResponse::RawResponse(response) => {
-            match response {
-                Response::Result(success, message) => {
-                    println!(
-                        "{}: {}",
-                        if success {
-                            "Success".green().bold()
-                        } else {
-                            "Error".red().bold()
-                        },
-                        if message != "" {
-                            message
-                        } else {
-                            "No message".italic().to_string()
-                        }
-                    );
-                }
-                _ => {
-                    println!("{response}");
-                }
-            }
-            Ok(())
-        }
-        ClientResponse::Failure(error) => Err(anyhow!("Failure: {error}")),
-        _ => Err(anyhow!("Received invalid response from hub: {resp}")),
     }
 }
 
 /// Main function for command line client.
 ///
-/// This sends command to hub, and processes response from hub.
+/// Note: This is a minimal viable implementation.
 pub fn main(stream: &mut UnixStream, command: String) -> Result<()> {
     match command.split_whitespace().collect::<Vec<_>>().as_slice() {
-        ["list", args @ ..] => {
-            stream.write(&ClientCommand::List)?;
-
-            let resp = stream.read::<ClientResponse>()?;
-            match resp {
-                ClientResponse::List(mut nodes) => {
-                    if args.contains(&"sorted") {
-                        nodes.sort_by(|a, b| a.address.cmp(&b.address))
-                    }
-
-                    handle_response(ClientResponse::List(nodes))?;
-                }
-                _ => {
-                    return Err(anyhow!("Hub daemon provided an invalid response: {resp}"));
-                }
-            }
-        }
         ["subscribe", ..] => {
-            stream.write(&ClientCommand::Subscribe)?;
-
             println!("Node state atomic updates will be printed in terminal.");
             println!("NOTE: Integrations should communicate with hub over socket.");
 
+            stream.write(&ClientCommand::Subscribe)?;
             loop {
                 let resp = stream.read::<ClientResponse>()?;
-                handle_response(resp)?;
+                println!("{}", resp);
             }
+        }
+        ["list", args @ ..] => {
+            stream.write(&ClientCommand::List)?;
+            let resp = stream.read::<ClientResponse>()?;
+            let mut nodes = match_strict!(resp, ClientResponse::List(nodes), nodes);
+
+            if args.contains(&"sorted") {
+                nodes.sort_by(|a, b| a.address.cmp(&b.address))
+            }
+
+            print_node_list(nodes);
         }
         [node, "execute", label @ ..] => {
             let command = Command::Execute(label.join(" "), true);
@@ -221,23 +187,14 @@ pub fn main(stream: &mut UnixStream, command: String) -> Result<()> {
             if node == &"-" {
                 stream.write(&ClientCommand::List)?;
                 let resp = stream.read::<ClientResponse>()?;
-                match resp {
-                    ClientResponse::List(nodes) => {
-                        let mut is_first = true;
-                        for node in nodes {
-                            if node.connected {
-                                if !is_first {
-                                    println!("");
-                                }
-                                is_first = false;
+                let nodes = match_strict!(resp, ClientResponse::List(nodes), nodes);
 
-                                exec_command(stream, node, command.clone())?;
-                            }
-                        }
+                for (i, node) in nodes.into_iter().filter(|node| node.connected).enumerate() {
+                    if i != 0 {
+                        println!("");
                     }
-                    _ => {
-                        return Err(anyhow!("Hub daemon provided an invalid response: {resp}"));
-                    }
+
+                    exec_command(stream, node, command.clone())?;
                 }
             } else {
                 let node = find_node(stream, node.to_string())?;
