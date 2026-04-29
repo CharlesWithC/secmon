@@ -22,6 +22,7 @@ Utility commands:
   secmon <node> execute <label>     execute an allowed command
 
   <node> can be serial, address, hostname, or \"-\" for all connected nodes.
+  Due to sync design, each node can only handle one command at a time.
 
 Environment:
   hub:      BIND_IP=<ip> BIND_PORT=<port>       (default: 127.0.0.1:9992)
