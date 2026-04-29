@@ -181,7 +181,7 @@ pub fn main(stream: &mut UnixStream, command: String) -> Result<()> {
 
             print_node_list(nodes);
         }
-        [node, "execute", label @ ..] => {
+        [node, label @ ..] => {
             let command = Command::Execute(label.join(" "), true);
 
             if node == &"-" {

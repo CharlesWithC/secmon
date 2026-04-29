@@ -19,7 +19,7 @@ const USAGE: &str = "Usage:
 Utility commands:
   secmon subscribe                  subscribe to node state atomic updates
   secmon list [sorted]              list all connected nodes
-  secmon <node> execute <label>     execute an allowed command
+  secmon <node> <command-label>     execute an allowed command
 
   <node> can be serial, address, hostname, or \"-\" for all connected nodes.
   Due to sync design, each node can only handle one command at a time.
