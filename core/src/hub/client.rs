@@ -34,91 +34,85 @@ fn find_node(stream: &mut UnixStream, node: String) -> Result<Node> {
     match_strict!(resp, ClientResponse::Node(node), Ok(node))
 }
 
-/// Prints node list in a human-friendly format.
-fn print_node_list(nodes: Vec<Node>) -> () {
-    for (i, node) in nodes.iter().enumerate() {
-        if i != 0 {
-            println!("");
+/// Prints info about a node in a human-friendly format.
+fn print_node(node: &Node) -> () {
+    println!(
+        "{}: {} ({})",
+        "node".green().bold(),
+        node.hostname.green(),
+        if node.connected {
+            "connected".green()
+        } else {
+            "disconnected".red()
         }
+    );
+    println!("  {}: {}", "serial".bold(), node.serial);
+    println!("  {}: {}", "address".bold(), node.address);
+    let last_state_update_dt: DateTime<Local> = node.last_state_update.into();
+    println!(
+        "  {}: {}",
+        "last state update".bold(),
+        last_state_update_dt.format("%F %T")
+    );
 
-        println!(
-            "{}: {} ({})",
-            "node".green().bold(),
-            node.hostname.green(),
-            if node.connected {
-                "connected".green()
-            } else {
-                "disconnected".red()
-            }
-        );
-        println!("  {}: {}", "serial".bold(), node.serial);
-        println!("  {}: {}", "address".bold(), node.address);
-        let last_state_update_dt: DateTime<Local> = node.last_state_update.into();
-        println!(
-            "  {}: {}",
-            "last state update".bold(),
-            last_state_update_dt.format("%F %T")
-        );
-
-        macro_rules! print_err {
-            ( $err:expr, $attr:expr ) => {
-                match $err {
-                    NodeDataError::Initializing => {
-                        println!("\n{}: Initializing", $attr.yellow().bold())
-                    }
-                    NodeDataError::NotMonitored => {} // no verbose on not monitored attributes
-                    NodeDataError::Message(msg) => {
-                        println!("\n{}: {msg}", $attr.yellow().bold())
-                    }
+    macro_rules! print_err {
+        ( $err:expr, $attr:expr ) => {
+            match $err {
+                NodeDataError::Initializing => {
+                    println!("\n{}: Initializing", $attr.yellow().bold())
                 }
-            };
-        }
-
-        match &node.sessions {
-            Ok(sessions) => {
-                if sessions.len() > 0 {
-                    println!("\n{}:", "sessions".yellow().bold());
-                    let max_user_len = sessions
-                        .into_iter()
-                        .map(|session| session.user.len())
-                        .max()
-                        .unwrap_or(0);
-                    sessions.into_iter().for_each(|session| {
-                        let dt: DateTime<Local> = session.login.into();
-                        let from = if let Some(from) = &session.from {
-                            format!("({from})")
-                        } else {
-                            format!("(/)")
-                        };
-                        println!(
-                            "  {user: <user_width$}{login: <7}{from}",
-                            user = session.user,
-                            user_width = max_user_len + 2,
-                            login = dt.format("%H:%M"),
-                            from = from
-                        );
-                    })
+                NodeDataError::NotMonitored => {} // no verbose on not monitored attributes
+                NodeDataError::Message(msg) => {
+                    println!("\n{}: {msg}", $attr.yellow().bold())
                 }
             }
-            Err(e) => print_err!(e, "sessions"),
-        }
+        };
+    }
 
-        match &node.wg_peers {
-            Ok(wg_peers) => wg_peers.into_iter().for_each(|wg_peer| {
-                println!("\n{}: {}", "wg peer".yellow().bold(), wg_peer.peer);
-                println!("  {}: {}", "interface".bold(), wg_peer.interface);
-                if let Some(endpoint) = &wg_peer.endpoint {
-                    println!("  {}: {}", "endpoint".bold(), endpoint);
-                }
-                if let Some(latest_handshake) = &wg_peer.latest_handshake {
-                    let dt: DateTime<Local> = (*latest_handshake).into();
-                    let parsed = format!("{}", dt.format("%F %T"));
-
-                    println!("  {}: {}", "latest handshake".bold(), parsed);
-                }
-            }),
-            Err(e) => print_err!(e, "wg peers"),
+    match &node.sessions {
+        Ok(sessions) => {
+            if sessions.len() > 0 {
+                println!("\n{}:", "sessions".yellow().bold());
+                let max_user_len = sessions
+                    .into_iter()
+                    .map(|session| session.user.len())
+                    .max()
+                    .unwrap_or(0);
+                sessions.into_iter().for_each(|session| {
+                    let dt: DateTime<Local> = session.login.into();
+                    let from = if let Some(from) = &session.from {
+                        format!("({from})")
+                    } else {
+                        format!("(/)")
+                    };
+                    println!(
+                        "  {user: <user_width$}{login: <7}{from}",
+                        user = session.user,
+                        user_width = max_user_len + 2,
+                        login = dt.format("%H:%M"),
+                        from = from
+                    );
+                })
+            }
         }
+        Err(e) => print_err!(e, "sessions"),
+    }
+
+    match &node.wg_peers {
+        Ok(wg_peers) => wg_peers.into_iter().for_each(|wg_peer| {
+            println!("\n{}: {}", "wg peer".yellow().bold(), wg_peer.peer);
+            println!("  {}: {}", "interface".bold(), wg_peer.interface);
+            if let Some(endpoint) = &wg_peer.endpoint {
+                println!("  {}: {}", "endpoint".bold(), endpoint);
+            }
+            if let Some(latest_handshake) = &wg_peer.latest_handshake {
+                let dt: DateTime<Local> = (*latest_handshake).into();
+                let parsed = format!("{}", dt.format("%F %T"));
+
+                println!("  {}: {}", "latest handshake".bold(), parsed);
+            }
+        }),
+        Err(e) => print_err!(e, "wg peers"),
     }
 }
 
@@ -204,7 +198,7 @@ fn exec_command(stream: &mut UnixStream, node: Node, command: Command) -> Result
 /// Note: This is a minimal viable implementation.
 pub fn main(stream: &mut UnixStream, command: String) -> Result<()> {
     match command.split_whitespace().collect::<Vec<_>>().as_slice() {
-        ["subscribe", ..] => {
+        ["subscribe"] => {
             println!("Node state atomic updates will be printed in terminal.");
             println!("NOTE: Integrations should communicate with hub over socket.");
 
@@ -214,16 +208,24 @@ pub fn main(stream: &mut UnixStream, command: String) -> Result<()> {
                 println!("{}", resp);
             }
         }
-        ["list", args @ ..] => {
+        ["list"] | ["-"] => {
             stream.write(&ClientCommand::List)?;
             let resp = stream.read::<ClientResponse>()?;
             let mut nodes = match_strict!(resp, ClientResponse::List(nodes), nodes);
+            nodes.sort_by(|a, b| a.address.cmp(&b.address));
 
-            if args.contains(&"sorted") {
-                nodes.sort_by(|a, b| a.address.cmp(&b.address))
+            for (i, node) in nodes.iter().enumerate() {
+                if i != 0 {
+                    println!("");
+                }
+                print_node(node);
             }
-
-            print_node_list(nodes);
+        }
+        [node] => {
+            stream.write(&ClientCommand::FindNode((*node).to_owned()))?;
+            let resp = stream.read::<ClientResponse>()?;
+            let node = match_strict!(resp, ClientResponse::Node(node), node);
+            print_node(&node);
         }
         [node, label @ ..] => {
             let command = Command::Execute(label.join(" "), true);
@@ -241,7 +243,7 @@ pub fn main(stream: &mut UnixStream, command: String) -> Result<()> {
                     exec_command(stream, node, command.clone())?;
                 }
             } else {
-                let node = find_node(stream, node.to_string())?;
+                let node = find_node(stream, (*node).to_owned())?;
                 exec_command(stream, node, command)?;
             }
         }

@@ -18,10 +18,11 @@ const USAGE: &str = "Usage:
 
 Utility commands:
   secmon subscribe                  subscribe to node state atomic updates
-  secmon list [sorted]              list all connected nodes
+  secmon <list|->                   list all recently connected nodes
+  secmon <node>                     print info about a recently connected node
   secmon <node> <command-label>     execute an allowed command
 
-  <node> can be serial, address, hostname, or \"-\" for all connected nodes.
+  <node> can be serial, address, hostname. Use \"-\" for all connected nodes.
   Due to sync design, each node can only handle one command at a time.
 
 Environment:
