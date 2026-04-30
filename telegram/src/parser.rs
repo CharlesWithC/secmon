@@ -12,6 +12,12 @@ pub fn parse_node_update(node: &Node, data: &NodeUpdate) -> Option<String> {
     let mut result = format!("<b>{}</b> (<code>{}</code>)\n", node.hostname, node.address);
     let mut ok = false;
 
+    macro_rules! get_pid {
+        ( $process:expr ) => {
+            $process[$process.find("[").unwrap() + 1..$process.find("]").unwrap() - 1].to_owned()
+        };
+    }
+
     if let Some(ref auth_log_res) = data.auth_log {
         ok = true;
         match auth_log_res {
@@ -38,17 +44,20 @@ pub fn parse_node_update(node: &Node, data: &NodeUpdate) -> Option<String> {
                 }
                 AuthLogDetail::SuOpen(target) => {
                     result += &format!(
-                        "[<code>{process}</code>] <code>{user}</code> opened session for <code>{target}</code>.\n"
+                        "[SU] <code>{user}</code> opened session for <code>{target}</code> (pid=<code>{}</code>).\n",
+                        get_pid!(process)
                     )
                 }
                 AuthLogDetail::SuFail(target) => {
                     result += &format!(
-                        "[<code>{process}</code>] <code>{user}</code> FAILED to open session for <code>{target}</code>.\n"
+                        "[SU] <code>{user}</code> FAILED to open session for <code>{target}</code> (pid=<code>{}</code>).\n",
+                        get_pid!(process)
                     )
                 }
                 AuthLogDetail::SuClose(target) => {
                     result += &format!(
-                        "[<code>{process}</code>] A session for <code>{target}</code> was closed.\n"
+                        "[SU] A session for <code>{target}</code> was closed (pid=<code>{}</code>).\n",
+                        get_pid!(process)
                     )
                 }
             },
