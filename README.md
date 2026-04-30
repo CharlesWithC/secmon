@@ -28,9 +28,11 @@ Client 2 <-----------| |-----------> Node 2
 
 ## Packages
 
-Core \[[README](/core/README.md)\]: The core `hub` and `node` daemon, plus a minimal viable implementation of cli client.
+**Core** \[[README](/core/README.md)\]: The core `hub` and `node` daemon, plus a minimal viable implementation of cli client.
 
-Telegram \[[README](/telegram/README.md)\]: Telegram bot integration for single-user control and updates.
+**Telegram** \[[README](/telegram/README.md)\]: Telegram bot integration for single-user control and updates.
+
+**Discord** \[[README](/discord/README.md)\]: Discord webhook integration for single-webhook updates.
 
 ## The Philosophy (Data Monitored)
 

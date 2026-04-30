@@ -1,6 +1,6 @@
 [workspace]
 members = [
-    "core", "telegram",
+    "core", "discord", "telegram",
 ]
 
 resolver = "3"

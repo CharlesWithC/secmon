@@ -32,7 +32,7 @@ const USAGE: &str = "Usage:
 Environment:
   TELEGRAM_BOT_TOKEN=<token>        mandatory
   TELEGRAM_USER_ID=<user-id>        mandatory; user authorized to use the bot
-  IPV4ONLY=<true|false>            optional; use if ipv6 connection times out
+  IPV4ONLY=<true|false>             optional; use if ipv6 connection times out
   COMMAND_ALLOWLIST_FILE=<path>     optional; necessary for [exec] to function
 
 COMMAND_ALLOWLIST_FILE:

@@ -2,7 +2,7 @@
 
 Telegram bot integration for single-user control and updates.
 
-This is a minimal viable implementation that sends ssh/su updates, allows user to list nodes and remotely execute commands. Advanced features such as streaming result of remote command execution is not supported, as the focus of the project is not to develop a perfect Telegram bot.
+This is a minimal viable implementation that sends ssh/su updates, allows user to list nodes and remotely execute commands. Advanced features such as streaming result of remote command execution are not supported, as the focus of the project is not to develop a perfect Telegram bot.
 
 ## Basic Usage
 
