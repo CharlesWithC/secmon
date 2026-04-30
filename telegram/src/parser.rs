@@ -3,6 +3,7 @@ use chrono::offset::Local;
 
 use secmon::models::hub::Node;
 use secmon::models::node::{AuthLog, AuthLogDetail, NodeDataError, NodeUpdate};
+use secmon::models::packet::ResultStatus;
 
 /// Returns node update parsed in user-friendly format.
 ///
@@ -163,4 +164,31 @@ pub fn parse_node_list(nodes: &Vec<Node>) -> Option<String> {
     } else {
         Some(ret)
     }
+}
+
+/// Returns exec result in user-friendly format.
+pub fn parse_result(node: &Node, (status, output): &(ResultStatus, String)) -> String {
+    let mut ret = format!("<b>{}</b> (<code>{}</code>)\n", node.hostname, node.address);
+
+    let output = match output.as_str().trim() {
+        "" => "<i>No output</i>".to_owned(),
+        _ => format!("\n<code>{output}</code>"),
+    };
+
+    match status {
+        ResultStatus::Timeout => {
+            ret += format!("⏰ Timeout: {}", output).as_str();
+        }
+        ResultStatus::Success => {
+            ret += format!("✅ Success: {}", output).as_str();
+        }
+        ResultStatus::Failure => {
+            ret += format!("❌ Failure: {}", output).as_str();
+        }
+        _ => {
+            println!("Received invalid partial result: {output}")
+        }
+    }
+
+    ret
 }
