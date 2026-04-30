@@ -1,4 +1,5 @@
 use anyhow::{Result, anyhow};
+use chrono_tz::Tz;
 use frankenstein::client_ureq::Bot;
 use frankenstein::methods::{GetUpdatesParams, SendMessageParams};
 use frankenstein::types::AllowedUpdate;
@@ -31,7 +32,7 @@ const USAGE: &str = "Usage:
 Environment:
   TELEGRAM_BOT_TOKEN=<token>        mandatory
   TELEGRAM_USER_ID=<user-id>        mandatory; user authorized to use the bot
-  IPV4_ONLY=<true|false>            optional; use if ipv6 connection times out
+  IPV4ONLY=<true|false>            optional; use if ipv6 connection times out
   COMMAND_ALLOWLIST_FILE=<path>     optional; necessary for [exec] to function
 
 COMMAND_ALLOWLIST_FILE:
@@ -49,8 +50,8 @@ fn build_bot() -> &'static Bot {
         .http_status_as_error(false)
         .ip_family(ureq::config::IpFamily::Ipv4Only)
         .timeout_global(Some(Duration::from_secs(500)));
-    if get_env_var_strict("IPV4_ONLY", Some(false)) {
-        println!("[NOTE] IPV4_ONLY is enabled");
+    if get_env_var_strict("IPV4ONLY", Some(false)) {
+        println!("[NOTE] IPV4ONLY is enabled");
         config_builder = config_builder.ip_family(ureq::config::IpFamily::Ipv4Only)
     }
     let agent = ureq::Agent::new_with_config(config_builder.build());
@@ -89,6 +90,7 @@ fn thread_node_update(send_message: &impl Fn(Option<String>)) -> Result<()> {
 /// Handles a message from the telegram user.
 fn handle_message(
     enable_exec: bool,
+    tz: &Tz,
     send_message: &impl Fn(Option<String>),
     message: String,
 ) -> Result<()> {
@@ -96,11 +98,11 @@ fn handle_message(
         ["list"] | ["-"] => {
             let mut nodes = utils::list_nodes()?;
             nodes.sort_by(|a, b| a.address.cmp(&b.address));
-            send_message(parser::parse_node_list(&nodes));
+            send_message(parser::parse_node_list(tz, &nodes));
         }
         [node] => {
             let node = utils::find_node((*node).to_owned())?;
-            send_message(Some(parser::parse_node(&node)));
+            send_message(Some(parser::parse_node(tz, &node)));
         }
         [node, label @ ..] => {
             if !enable_exec {
@@ -180,6 +182,16 @@ fn main() {
         process::exit(1);
     }
 
+    let tz = get_env_var_strict(
+        "TIMEZONE",
+        Some(
+            iana_time_zone::get_timezone()
+                .unwrap_or_else(|_| "UTC".to_string())
+                .parse::<Tz>()
+                .unwrap_or(chrono_tz::UTC),
+        ),
+    );
+
     let bot = build_bot();
 
     // helper function to send message with `user_id` copied inside
@@ -257,7 +269,7 @@ fn main() {
 
                                 if let Some(message) = message.text {
                                     if let Err(e) =
-                                        handle_message(enable_exec, &send_message, message)
+                                        handle_message(enable_exec, &tz, &send_message, message)
                                     {
                                         send_message(Some(format!("Error: {e}")));
                                     }

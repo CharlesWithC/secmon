@@ -1,5 +1,5 @@
-use chrono::DateTime;
-use chrono::offset::Local;
+use chrono::{DateTime, Utc};
+use chrono_tz::Tz;
 
 use secmon::models::hub::Node;
 use secmon::models::node::{AuthLog, AuthLogDetail, NodeDataError, NodeUpdate};
@@ -60,7 +60,7 @@ pub fn parse_node_update(node: &Node, data: &NodeUpdate) -> Option<String> {
 }
 
 /// Returns single node parsed in user-friendly format.
-pub fn parse_node(node: &Node) -> String {
+pub fn parse_node(tz: &Tz, node: &Node) -> String {
     let mut ret = String::new();
 
     let connected = match node.connected {
@@ -99,7 +99,8 @@ pub fn parse_node(node: &Node) -> String {
                     .max()
                     .unwrap_or(0);
                 sessions.into_iter().for_each(|session| {
-                        let dt: DateTime<Local> = session.login.into();
+                        let dt: DateTime<Utc> = session.login.into();
+                        let dt: DateTime<Tz> = dt.with_timezone(tz);
                         let from = if let Some(from) = &session.from {
                             format!("({from})")
                         } else {
@@ -129,7 +130,8 @@ pub fn parse_node(node: &Node) -> String {
                         ret += format!("  <code>{}</code>", endpoint).as_str();
                     }
                     if let Some(latest_handshake) = &wg_peer.latest_handshake {
-                        let dt: DateTime<Local> = (*latest_handshake).into();
+                        let dt: DateTime<Utc> = (*latest_handshake).into();
+                        let dt: DateTime<Tz> = dt.with_timezone(tz);
                         let parsed = format!("{}", dt.format("%F %T"));
 
                         ret += format!("  <code>{}</code>", parsed).as_str();
@@ -147,11 +149,11 @@ pub fn parse_node(node: &Node) -> String {
 /// Returns node list parsed in user-friendly format.
 ///
 /// `None` result means that there is no node in the list.
-pub fn parse_node_list(nodes: &Vec<Node>) -> Option<String> {
+pub fn parse_node_list(tz: &Tz, nodes: &Vec<Node>) -> Option<String> {
     let mut ret = String::new();
 
     for node in nodes {
-        ret += parse_node(node).as_str();
+        ret += parse_node(tz, node).as_str();
 
         if ret != "" {
             ret += "\n";
