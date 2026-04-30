@@ -662,6 +662,7 @@ name = "secmon-tg"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "frankenstein",
  "secmon",
 ]

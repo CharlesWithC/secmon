@@ -24,7 +24,7 @@ fn find_node(query: String, hub_state: &HubStateMutex) -> ClientResponse {
         })
         .map(|(node, _)| ClientResponse::Node(node.clone()))
         .unwrap_or(ClientResponse::Failure(format!(
-            "unable to identify node with '{query}'"
+            "Unable to identify node with '{query}'"
         )))
 }
 

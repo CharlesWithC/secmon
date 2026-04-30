@@ -1,39 +1,22 @@
 use anyhow::{Result, anyhow};
 use std::os::unix::net::UnixStream;
-use std::sync::{Arc, Mutex};
 
 use secmon::models::hub::{ClientCommand, ClientResponse, Node};
 use secmon::traits::iosered::IOSerialized;
 use secmon::utils::get_socket_path;
 
-/// Returns a node based on serial.
-///
-/// This method tries to find the node in cached data if `use_cache=true`,
-/// and requests data from hub if the node cannot be found.
-pub fn find_node(
-    serial: u32,
-    nodes_mutex: &Arc<Mutex<Vec<Node>>>,
-    use_cache: bool,
-) -> Result<Node> {
-    // try to find node in cache
-    let mut guard = nodes_mutex.lock().unwrap();
-    let ref mut nodes = *guard;
-    let node_opt = nodes.iter().find(|node| node.serial == serial);
-    if use_cache && let Some(node) = node_opt {
-        return Ok(node.clone());
-    }
-
-    // request data from hub
-    // note: we keep the guard to ensure cache integrity and since hub responds very quickly
-    let resp = execute_command(&ClientCommand::FindNode(serial.to_string()))?;
-    match resp {
-        ClientResponse::Node(node) => {
-            nodes.push(node.clone());
-            Ok(node)
+macro_rules! match_response {
+    ( $action:expr, $response:expr, $pattern:pat, $return:expr ) => {
+        match $response {
+            $pattern => Ok($return),
+            ClientResponse::Failure(e) => Err(anyhow!("Unable to {}: {}", $action, e)),
+            _ => Err(anyhow!(
+                "Unable to {}: Invalid hub daemon response: {}",
+                $action,
+                $response
+            )),
         }
-        ClientResponse::Failure(e) => Err(anyhow!("Unable to find node: {e}")),
-        _ => Err(anyhow!("Unable to find node: Hub sent an invalid response")),
-    }
+    };
 }
 
 /// Executes a command on hub and returns the response.
@@ -45,4 +28,19 @@ pub fn execute_command(command: &ClientCommand) -> Result<ClientResponse> {
         }
         Err(e) => Err(anyhow!("Unable to connect to hub daemon: {e}")),
     }
+}
+
+/// Returns result of finding a node.
+pub fn find_node(query: String) -> Result<Node> {
+    let resp = execute_command(&ClientCommand::FindNode(query))?;
+    let node = match_response!("find node", resp, ClientResponse::Node(node), node)?;
+    Ok(node)
+}
+
+/// Returns all nodes connected to hub.
+pub fn list_nodes() -> Result<Vec<Node>> {
+    let resp = execute_command(&ClientCommand::List)?;
+    let mut nodes = match_response!("list nodes", resp, ClientResponse::List(nodes), nodes)?;
+    nodes.sort_by(|a, b| a.address.cmp(&b.address));
+    Ok(nodes)
 }

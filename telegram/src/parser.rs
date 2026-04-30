@@ -1,5 +1,8 @@
+use chrono::DateTime;
+use chrono::offset::Local;
+
 use secmon::models::hub::Node;
-use secmon::models::node::{AuthLog, AuthLogDetail, NodeUpdate};
+use secmon::models::node::{AuthLog, AuthLogDetail, NodeDataError, NodeUpdate};
 
 /// Returns node update parsed in user-friendly format.
 ///
@@ -53,4 +56,111 @@ pub fn parse_node_update(node: &Node, data: &NodeUpdate) -> Option<String> {
     }
 
     if ok { Some(result) } else { None }
+}
+
+/// Returns single node parsed in user-friendly format.
+pub fn parse_node(node: &Node) -> String {
+    let mut ret = String::new();
+
+    let connected = match node.connected {
+        true => "✅",
+        false => "❌",
+    };
+    ret += format!(
+        "{connected} <b>{}</b> (<code>{}</code>)\n",
+        node.hostname, node.address
+    )
+    .as_str();
+
+    macro_rules! format_err {
+        ( $err:expr, $attr:expr ) => {
+            match $err {
+                NodeDataError::Initializing => {
+                    format!("{}: Initializing\n", $attr)
+                }
+                NodeDataError::NotMonitored => {
+                    format!("")
+                }
+                NodeDataError::Message(msg) => {
+                    format!("{}: {}\n", $attr, msg)
+                }
+            }
+        };
+    }
+
+    match &node.sessions {
+        Ok(sessions) => {
+            if sessions.len() > 0 {
+                ret += "sessions:\n";
+                let max_user_len = sessions
+                    .into_iter()
+                    .map(|session| session.user.len())
+                    .max()
+                    .unwrap_or(0);
+                sessions.into_iter().for_each(|session| {
+                        let dt: DateTime<Local> = session.login.into();
+                        let from = if let Some(from) = &session.from {
+                            format!("({from})")
+                        } else {
+                            format!("(/)")
+                        };
+                        ret += format!(
+                            "  <code>{user: <user_width$}</code><code>{login: <7}</code><code>{from}</code>\n",
+                            user = session.user,
+                            user_width = max_user_len + 2,
+                            login = dt.format("%H:%M"),
+                            from = from
+                        )
+                        .as_str();
+                    });
+            }
+        }
+        Err(e) => ret += format_err!(e, "sessions").as_str(),
+    }
+
+    match &node.wg_peers {
+        Ok(wg_peers) => {
+            if wg_peers.len() > 0 {
+                ret += "wg peers:\n";
+                wg_peers.into_iter().for_each(|wg_peer| {
+                    ret += format!("  <code>{}</code>", wg_peer.interface).as_str();
+                    if let Some(endpoint) = &wg_peer.endpoint {
+                        ret += format!("  <code>{}</code>", endpoint).as_str();
+                    }
+                    if let Some(latest_handshake) = &wg_peer.latest_handshake {
+                        let dt: DateTime<Local> = (*latest_handshake).into();
+                        let parsed = format!("{}", dt.format("%F %T"));
+
+                        ret += format!("  <code>{}</code>", parsed).as_str();
+                    }
+                    ret += "\n";
+                });
+            }
+        }
+        Err(e) => ret += format_err!(e, "wg peers").as_str(),
+    }
+
+    ret
+}
+
+/// Returns node list parsed in user-friendly format.
+///
+/// `None` result means that there is no node in the list.
+pub fn parse_node_list(nodes: &Vec<Node>) -> Option<String> {
+    let mut ret = String::new();
+
+    for node in nodes {
+        ret += parse_node(node).as_str();
+
+        if ret != "" {
+            ret += "\n";
+        }
+    }
+
+    ret = ret.as_str().trim().to_owned();
+    if ret == String::new() {
+        None
+    } else {
+        Some(ret)
+    }
 }
