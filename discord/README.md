@@ -13,3 +13,7 @@ The following environment variable may be configured optionally:
 - `DISCORD_MESSAGE_CONTENT=<content>`
 
 Then, start the integration with `secmon-dc`.
+
+## Notes
+
+For obvious reasons, `secmon-dc` must run on the same server and under the same user as `secmon hub`, as they communicate over unix socket.
