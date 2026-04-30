@@ -9,7 +9,7 @@ use std::time::Duration;
 use crate::models::NodeConfig;
 use crate::models::node::{NodeDataError, NodeStateMutex, NodeUpdate};
 use crate::models::packet::{Command, Response, ResultStatus};
-use crate::traits::exec::{ChildWait, CommandExec};
+use crate::traits::exec::{ChildWait, CommandExec, ExecResult, WaitResult};
 use crate::utils::{get_env_var, get_env_var_strict, read_lines};
 
 /// Handles raw command execution.
@@ -29,8 +29,24 @@ fn handle_exec_command(
         // `command.run` nicely abstracts child process and timeout handling
         let result = command.run(timeout);
         sw_s.send(match result {
-            Ok(output) => Response::Result(true, output),
-            Err(error) => Response::Result(false, error),
+            Ok(output) => match output {
+                ExecResult {
+                    timeout_kill: true,
+                    status: _,
+                    output,
+                } => Response::Result(ResultStatus::Timeout, output),
+                ExecResult {
+                    timeout_kill: false,
+                    status,
+                    output,
+                } if status.success() => Response::Result(ResultStatus::Success, output),
+                ExecResult {
+                    timeout_kill: false,
+                    status: _,
+                    output,
+                } => Response::Result(ResultStatus::Failure, output),
+            },
+            Err(error) => Response::Result(ResultStatus::Failure, error),
         })?;
     } else {
         macro_rules! stream_failure {
@@ -69,7 +85,10 @@ fn handle_exec_command(
                 t.join().unwrap()?; // wait for thread to complete
 
                 match result {
-                    Ok((timeout_kill, status)) => match timeout_kill {
+                    Ok(WaitResult {
+                        timeout_kill,
+                        status,
+                    }) => match timeout_kill {
                         true => sw_s.send(Response::ResultStream(
                             ResultStatus::Timeout,
                             String::from(""),
@@ -108,7 +127,7 @@ pub fn handle_command(
             match get_env_var::<String>("COMMAND_ALLOWLIST_FILE", None).unwrap() {
                 None => {
                     sw_s.send(Response::Result(
-                        false,
+                        ResultStatus::Failure,
                         "Command allowlist not set (Missing env var: COMMAND_ALLOWLIST_FILE)"
                             .to_owned(),
                     ))?;
@@ -116,7 +135,7 @@ pub fn handle_command(
                 Some(allowlist_file) => match read_lines(allowlist_file.clone()) {
                     Err(e) => {
                         sw_s.send(Response::Result(
-                            false,
+                            ResultStatus::Failure,
                             format!(
                                 "Unable to read '{allowlist_file}' (COMMAND_ALLOWLIST_FILE): {:?}",
                                 e
@@ -137,7 +156,7 @@ pub fn handle_command(
                                         }
                                         None => {
                                             sw_s.send(Response::Result(
-                                                false,
+                                                ResultStatus::Failure,
                                                 format!(
                                                     "Failed to parse command for '{line_label}'"
                                                 ),
@@ -153,7 +172,7 @@ pub fn handle_command(
 
                         // no match
                         sw_s.send(Response::Result(
-                            false,
+                            ResultStatus::Failure,
                             format!("'{label}' is not an allowed command"),
                         ))?;
                     }

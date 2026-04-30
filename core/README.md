@@ -2,7 +2,7 @@
 
 The core `hub` and `node` daemon, plus a minimal viable implementation of cli client.
 
-This module contains definitions of all models, traits and methods, which are public for integration use.
+This package contains definitions of all models, traits and methods, which are public for integration use.
 
 ## Basic Usage
 
@@ -14,9 +14,10 @@ Start `node` daemon with `secmon node [who] [wg] [auth] [--reconnect]`.
 
 The following commands can be used on the `hub` server:
 
-- `secmon list [sorted]`: list all connected (and recently disconnected) nodes
 - `secmon subscribe`: subscribe to node updates - mostly for debug purpose, or if you want to watch terminal print things
-- `secmon <node> execute <label>`: execute an allowed command on one/several node(s) and stream output
+- `secmon <list|->`: list all recently connected nodes
+- `secmon <node>`: show info about a recently connected node
+- `secmon <node> <command-label>`: execute an allowed command on one/several node(s) and stream output
 
 See `secmon help` for detailed information on using the program.
 

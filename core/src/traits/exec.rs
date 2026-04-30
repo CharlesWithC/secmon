@@ -5,18 +5,27 @@ use std::process::{self, ExitStatus};
 use std::thread;
 use std::time::Duration;
 
-type TimeoutKill = bool;
+pub struct ExecResult {
+    pub timeout_kill: bool,
+    pub status: ExitStatus,
+    pub output: String,
+}
+
+pub struct WaitResult {
+    pub timeout_kill: bool,
+    pub status: ExitStatus,
+}
 
 pub trait CommandExec {
     /// Spawns child and returns raw data for streaming. Timeout is not handled.
     fn stream(self) -> Result<(process::Child, PipeReader), String>;
     /// Spawns child, waits for output with optional timeout, and returns output.
-    fn run(self, timeout: Option<Duration>) -> Result<String, String>;
+    fn run(self, timeout: Option<Duration>) -> Result<ExecResult, String>;
 }
 
 pub trait ChildWait {
     /// Custom method for waiting for a child with optional timeout, based on `wait_timeout::ChildExt`.
-    fn wait_timeout(&mut self, timeout: Option<Duration>) -> Result<(TimeoutKill, ExitStatus)>;
+    fn wait_timeout(&mut self, timeout: Option<Duration>) -> Result<WaitResult>;
 }
 
 impl CommandExec for process::Command {
@@ -51,7 +60,10 @@ impl CommandExec for process::Command {
     }
 
     /// Executes command in a child process, waits for output with an optional timeout, and returns output.
-    fn run(self, timeout: Option<Duration>) -> Result<String, String> {
+    ///
+    /// Note: If child is timeout-killed, then result is an Ok. Error is only used when there is an error
+    /// executing the command (rather than, the command does not compelte successfully).
+    fn run(self, timeout: Option<Duration>) -> Result<ExecResult, String> {
         let program = self.get_program().to_str().unwrap().to_owned();
 
         let (mut child, mut reader) = self.stream()?;
@@ -64,35 +76,45 @@ impl CommandExec for process::Command {
             Ok(buf.trim().to_owned())
         });
 
-        let (timeout_kill, status) = ChildWait::wait_timeout(&mut child, timeout)
+        let WaitResult {
+            timeout_kill,
+            status,
+        } = ChildWait::wait_timeout(&mut child, timeout)
             .map_err(|e| format!("Failed to wait for '{program}': {e}"))?;
 
-        let mut output = t.join().unwrap()?;
-        if timeout_kill {
-            output += "\nTimeout";
-        }
-        match status.success() {
-            true => Ok(output),
-            false => Err(output),
-        }
+        let output = t.join().unwrap()?;
+        Ok(ExecResult {
+            timeout_kill,
+            status,
+            output,
+        })
     }
 }
 
 impl ChildWait for process::Child {
     /// Waits for the child to exit with an optional timeout,
     /// returns whether child is timeout-killed and its exit status.
-    fn wait_timeout(&mut self, timeout: Option<Duration>) -> Result<(TimeoutKill, ExitStatus)> {
+    fn wait_timeout(&mut self, timeout: Option<Duration>) -> Result<WaitResult> {
         match timeout {
-            None => Ok((false, self.wait()?)),
+            None => Ok(WaitResult {
+                timeout_kill: false,
+                status: self.wait()?,
+            }),
             Some(dur) => match wait_timeout::ChildExt::wait_timeout(self, dur) {
-                Ok(Some(status)) => Ok((false, status)),
+                Ok(Some(status)) => Ok(WaitResult {
+                    timeout_kill: false,
+                    status,
+                }),
                 Ok(None) => {
                     unsafe {
                         // kill process group (which includes grandchildren)
                         // just self.child() is not enough since grandchildren can hold FD
                         libc::kill(-(self.id() as i32), libc::SIGKILL);
                     }
-                    Ok((true, self.wait()?))
+                    Ok(WaitResult {
+                        timeout_kill: true,
+                        status: self.wait()?,
+                    })
                 }
                 Err(e) => Err(anyhow!(e)),
             },

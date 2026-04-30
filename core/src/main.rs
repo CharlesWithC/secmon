@@ -14,12 +14,12 @@ const USAGE: &str = "Usage:
   secmon hub                        launch hub daemon
   secmon node [who] [wg] [auth]     launch node daemon
     [--reconnect]
-  secmon help                       print this help message
+  secmon help                       show this help message
 
 Utility commands:
   secmon subscribe                  subscribe to node state atomic updates
   secmon <list|->                   list all recently connected nodes
-  secmon <node>                     print info about a recently connected node
+  secmon <node>                     show info about a recently connected node
   secmon <node> <command-label>     execute an allowed command
 
   <node> can be serial, address, hostname. Use \"-\" for all connected nodes.

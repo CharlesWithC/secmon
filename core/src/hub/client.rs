@@ -26,14 +26,6 @@ macro_rules! match_strict {
     };
 }
 
-/// Sends `FindNode` command to hub daemon,
-/// returns `Node` if found; otherwise, fail and exit.
-fn find_node(stream: &mut UnixStream, node: String) -> Result<Node> {
-    stream.write(&ClientCommand::FindNode((*node).to_owned()))?;
-    let resp = stream.read::<ClientResponse>()?;
-    match_strict!(resp, ClientResponse::Node(node), Ok(node))
-}
-
 /// Prints info about a node in a human-friendly format.
 fn print_node(node: &Node) -> () {
     println!(
@@ -117,7 +109,7 @@ fn print_node(node: &Node) -> () {
 }
 
 /// Executes command on a specific node and streams result.
-fn exec_command(stream: &mut UnixStream, node: Node, command: Command) -> Result<()> {
+fn exec_command(stream: &mut UnixStream, node: &Node, command: Command) -> Result<()> {
     let mut wait_timeout = get_env_var_strict("NODE_WAIT_TIMEOUT", Some(0));
     let expire_time = match wait_timeout {
         0 => UNIX_EPOCH,
@@ -234,17 +226,17 @@ pub fn main(stream: &mut UnixStream, command: String) -> Result<()> {
                 stream.write(&ClientCommand::List)?;
                 let resp = stream.read::<ClientResponse>()?;
                 let nodes = match_strict!(resp, ClientResponse::List(nodes), nodes);
-
                 for (i, node) in nodes.into_iter().filter(|node| node.connected).enumerate() {
                     if i != 0 {
                         println!("");
                     }
-
-                    exec_command(stream, node, command.clone())?;
+                    exec_command(stream, &node, command.clone())?;
                 }
             } else {
-                let node = find_node(stream, (*node).to_owned())?;
-                exec_command(stream, node, command)?;
+                stream.write(&ClientCommand::FindNode((*node).to_owned()))?;
+                let resp = stream.read::<ClientResponse>()?;
+                let node = match_strict!(resp, ClientResponse::Node(node), node);
+                exec_command(stream, &node, command)?;
             }
         }
         _ => Err(anyhow!("Invalid command; Use 'secmon help' for help"))?,

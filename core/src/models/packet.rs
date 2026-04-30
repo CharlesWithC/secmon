@@ -7,6 +7,9 @@ use crate::models::node::{NodeState, NodeUpdate};
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum Command {
     /// Request current node state
+    /// 
+    /// Note: Technically there is no reason to use this command, since hub stores the 
+    /// state and client should simply request the data from hub.
     NodeState,
 
     /// Execute a preconfigured allowed command
@@ -15,9 +18,6 @@ pub enum Command {
     ///
     /// If `Stream=true`, then `ResultStream` will be responded for each line of output, until
     /// command completes and a non-pending status with empty line output is returned.
-    ///
-    /// `REMOTE_EXEC_TIMEOUT` applies to timeout waiting for a response - that is, for streamed
-    /// response, timeout will not occur as long as something is responded within timeout period.
     Execute(Label, Stream),
 }
 
@@ -59,7 +59,7 @@ pub enum Response {
     /// Full result of executing a command
     ///
     /// Note: The result is only returned when the command completes.
-    Result(Success, Message),
+    Result(ResultStatus, Message),
 
     /// Partial result of executing a command
     ///
@@ -89,7 +89,6 @@ impl fmt::Display for ResultStatus {
 }
 
 pub type Hostname = String;
-pub type Success = bool;
 pub type Message = String;
 pub type Line = String;
 
