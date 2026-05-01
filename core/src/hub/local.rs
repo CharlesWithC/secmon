@@ -23,7 +23,7 @@ fn find_node(query: String, hub_state: &HubStateMutex) -> ClientResponse {
                 || node.address.to_string().split(":").next() == Some(&query)
         })
         .map(|(node, _)| ClientResponse::Node(node.clone()))
-        .unwrap_or(ClientResponse::Failure(format!(
+        .unwrap_or(ClientResponse::Error(format!(
             "Unable to identify node with '{query}'"
         )))
 }
@@ -43,21 +43,21 @@ fn handle_raw_command(
     if let Some((_, sender)) = nodes.iter().find(|(node, _)| node.serial == serial) {
         let (resp_s, resp_r) = unbounded::<Response>();
         if let Err(e) = sender.send((command, resp_s, expire_time)) {
-            stream.write(&ClientResponse::Failure(format!("{e}")))?;
+            stream.write(&ClientResponse::Error(format!("{e}")))?;
             return Ok(());
         }
         drop(guard);
 
         loop {
-            let resp = resp_r.recv()?;
-            let is_streaming = crate::utils::is_streaming_response(&resp);
-            stream.write(&ClientResponse::RawResponse(resp))?;
+            let response = resp_r.recv()?;
+            let is_streaming = crate::utils::is_streaming_response(&response);
+            stream.write(&ClientResponse::RawResponse(response))?;
             if !is_streaming {
                 break;
             }
         }
     } else {
-        stream.write(&ClientResponse::Failure(format!(
+        stream.write(&ClientResponse::Error(format!(
             "SERIAL={serial} is not a recognized node"
         )))?;
     }
@@ -84,24 +84,31 @@ fn thread_main(mut stream: UnixStream, hub_state: HubStateMutex) -> Result<()> {
 
                 loop {
                     let (serial, data) = r.recv()?;
-                    stream.write(&ClientResponse::NodeUpdate(serial, data))?;
+                    stream.write(&ClientResponse::NodeUpdate {
+                        node_serial: serial,
+                        data,
+                    })?;
                 }
 
                 // no need to try to remove subscriber
                 // remote would remove zombie subscribers automatically
             }
-            ClientCommand::List => {
+            ClientCommand::ListNodes => {
                 let guard = hub_state.lock().unwrap();
                 let (_, ref nodes, _) = *guard;
-                stream.write(&ClientResponse::List(
+                stream.write(&ClientResponse::Nodes(
                     nodes.into_iter().map(|(node, _)| node.clone()).collect(),
                 ))?;
             }
-            ClientCommand::FindNode(query) => {
+            ClientCommand::FindNode { query } => {
                 let resp = find_node(query, &hub_state);
                 stream.write(&resp)?;
             }
-            ClientCommand::RawCommand(serial, command, expire_time) => {
+            ClientCommand::RawCommand {
+                node_serial: serial,
+                command,
+                expire_time,
+            } => {
                 handle_raw_command(&stream, (serial, command, expire_time), &hub_state)?;
             }
         }

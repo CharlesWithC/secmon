@@ -47,37 +47,37 @@ pub fn parse_node_update(node: &Node, data: &NodeUpdate) -> Option<Embed> {
                 user,
                 detail,
             }) => match detail {
-                AuthLogDetail::SshConnect((host, port), method) => {
+                AuthLogDetail::SshConnect { host, port, method } => {
                     set_title!("SSH connection opened");
                     add_field!("User", user, true);
                     add_field!("Method", method, true);
                     add_field!("Origin", format!("`{host}:{port}`"), true);
                 }
-                AuthLogDetail::SshFailPassword((host, port)) => {
+                AuthLogDetail::SshFailPassword { host, port } => {
                     set_title!(":warning: FAILED SSH PASSWORD LOGIN");
                     add_field!("User", user, true);
                     add_field!("Origin", format!("`{host}:{port}`"), true);
                 }
-                AuthLogDetail::SshDisconnect((host, port)) => {
+                AuthLogDetail::SshDisconnect { host, port } => {
                     set_title!("SSH connection closed");
                     add_field!("User", user, true);
                     add_field!("Origin", format!("`{host}:{port}`"), true);
                 }
-                AuthLogDetail::SuOpen(target) => {
+                AuthLogDetail::SuOpen { target_user } => {
                     set_title!("SU session opened");
                     add_field!("User", user, true);
-                    add_field!("Target", target, true);
+                    add_field!("Target", target_user, true);
                     add_field!("PID", get_pid!(process), true);
                 }
-                AuthLogDetail::SuFail(target) => {
+                AuthLogDetail::SuFail { target_user } => {
                     set_title!(":warning: FAILED SU SESSION OPEN");
                     add_field!("User", user, true);
-                    add_field!("Target", target, true);
+                    add_field!("Target", target_user, true);
                     add_field!("PID", get_pid!(process), true);
                 }
-                AuthLogDetail::SuClose(target) => {
+                AuthLogDetail::SuClose { target_user } => {
                     set_title!("SU session closed");
-                    add_field!("Target", target, true);
+                    add_field!("Target", target_user, true);
                     add_field!("PID", get_pid!(process), true);
                 }
             },

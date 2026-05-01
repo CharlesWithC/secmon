@@ -180,66 +180,63 @@ pub enum AuthLogDetail {
     ///
     /// Example:
     /// ```Accepted publickey for drako from 1.1.1.1 port 50000 ssh2: ...```
-    SshConnect(AuthOrigin, AuthLoginMethod),
+    SshConnect {
+        host: String,
+        port: u16,
+        method: String,
+    },
     /// SSH connection failed
     ///
     /// Example:
     /// ```Failed password for drako from 1.1.1.1.1 port 50000 ssh2```
-    SshFailPassword(AuthOrigin),
+    SshFailPassword { host: String, port: u16 },
     /// SSH connection closed
     ///
     /// Example:
     /// ```Disconnected from user drako 1.1.1.1 port 50000```
-    SshDisconnect(AuthOrigin),
+    SshDisconnect { host: String, port: u16 },
     /// SU session opened
     ///
     /// Example:
     /// ```pam_unix(su:session): session opened for user root(uid=0) by drako(uid=0)```
-    SuOpen(TargetUser),
+    SuOpen { target_user: String },
     /// SU session failed
     ///
     /// Example:
     /// ```FAILED SU (to root) drako on pts/4```
-    SuFail(TargetUser),
+    SuFail { target_user: String },
     /// SU session closed
-    /// 
+    ///
     /// Note: The source/action user is not provided.
     ///
     /// Example:
     /// ```pam_unix(su:session): session closed for user root```
-    SuClose(TargetUser),
+    SuClose { target_user: String },
 }
 
 impl fmt::Display for AuthLogDetail {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::SshConnect((host, port), login_method) => write!(
+            Self::SshConnect { host, port, method } => write!(
                 f,
                 "SshConnect(host=\"{}\", port={}, method=\"{}\")",
-                host, port, login_method
+                host, port, method
             ),
-            Self::SshFailPassword((host, port)) => {
+            Self::SshFailPassword { host, port } => {
                 write!(f, "SshFailPassword(host=\"{}\", port={})", host, port)
             }
-            Self::SshDisconnect((host, port)) => {
+            Self::SshDisconnect { host, port } => {
                 write!(f, "SshDisconnect(host=\"{}\", port={})", host, port)
             }
-            Self::SuOpen(target) => {
-                write!(f, "SuOpen(target=\"{}\")", target)
+            Self::SuOpen { target_user } => {
+                write!(f, "SuOpen(target_user=\"{}\")", target_user)
             }
-            Self::SuFail(target) => {
-                write!(f, "SuFail(target=\"{}\")", target)
+            Self::SuFail { target_user } => {
+                write!(f, "SuFail(target_user=\"{}\")", target_user)
             }
-            Self::SuClose(target) => {
-                write!(f, "SuClose(target=\"{}\")", target)
+            Self::SuClose { target_user } => {
+                write!(f, "SuClose(target_user=\"{}\")", target_user)
             }
         }
     }
 }
-
-/// SSH Origin
-pub type AuthOrigin = (String, u16);
-/// SSH Login Method (publickey, password)
-pub type AuthLoginMethod = String;
-/// SU Target User
-pub type TargetUser = String;

@@ -15,8 +15,8 @@ macro_rules! match_strict {
     ( $response:expr, $pattern:pat, $return:expr ) => {
         match $response {
             $pattern => $return,
-            ClientResponse::Failure(e) => {
-                eprintln!("Failure: {}", e);
+            ClientResponse::Error(e) => {
+                eprintln!("Error: {}", e);
                 std::process::exit(1);
             }
             _ => {
@@ -121,11 +121,11 @@ fn exec_command(stream: &mut UnixStream, node: &Node, command: Command) -> Resul
         node.address.to_string().bold().cyan(),
         node.hostname.bold().cyan()
     );
-    stream.write(&ClientCommand::RawCommand(
-        node.serial,
+    stream.write(&ClientCommand::RawCommand {
+        node_serial: node.serial,
         command,
         expire_time,
-    ))?;
+    })?;
 
     if wait_timeout != 0 {
         // set a read timeout if wait_timeout is enabled
@@ -152,7 +152,7 @@ fn exec_command(stream: &mut UnixStream, node: &Node, command: Command) -> Resul
                 // use centralized streaming response detection to ensure consistency
                 let is_streaming = crate::utils::is_streaming_response(&raw_resp);
                 match raw_resp {
-                    Response::ResultStream(status, line) => match status {
+                    Response::ResultStream { status, line } => match status {
                         ResultStatus::Pending => {
                             println!("{line}");
                         }
@@ -201,9 +201,9 @@ pub fn main(stream: &mut UnixStream, command: String) -> Result<()> {
             }
         }
         ["list"] | ["-"] => {
-            stream.write(&ClientCommand::List)?;
+            stream.write(&ClientCommand::ListNodes)?;
             let resp = stream.read::<ClientResponse>()?;
-            let mut nodes = match_strict!(resp, ClientResponse::List(nodes), nodes);
+            let mut nodes = match_strict!(resp, ClientResponse::Nodes(nodes), nodes);
             nodes.sort_by(|a, b| a.address.cmp(&b.address));
 
             for (i, node) in nodes.iter().enumerate() {
@@ -214,18 +214,23 @@ pub fn main(stream: &mut UnixStream, command: String) -> Result<()> {
             }
         }
         [node] => {
-            stream.write(&ClientCommand::FindNode((*node).to_owned()))?;
+            stream.write(&ClientCommand::FindNode {
+                query: (*node).to_owned(),
+            })?;
             let resp = stream.read::<ClientResponse>()?;
             let node = match_strict!(resp, ClientResponse::Node(node), node);
             print_node(&node);
         }
         [node, label @ ..] => {
-            let command = Command::Execute(label.join(" "), true);
+            let command = Command::Execute {
+                command_label: label.join(" "),
+                stream: true,
+            };
 
             if node == &"-" {
-                stream.write(&ClientCommand::List)?;
+                stream.write(&ClientCommand::ListNodes)?;
                 let resp = stream.read::<ClientResponse>()?;
-                let nodes = match_strict!(resp, ClientResponse::List(nodes), nodes);
+                let nodes = match_strict!(resp, ClientResponse::Nodes(nodes), nodes);
                 for (i, node) in nodes.into_iter().filter(|node| node.connected).enumerate() {
                     if i != 0 {
                         println!("");
@@ -233,7 +238,9 @@ pub fn main(stream: &mut UnixStream, command: String) -> Result<()> {
                     exec_command(stream, &node, command.clone())?;
                 }
             } else {
-                stream.write(&ClientCommand::FindNode((*node).to_owned()))?;
+                stream.write(&ClientCommand::FindNode {
+                    query: (*node).to_owned(),
+                })?;
                 let resp = stream.read::<ClientResponse>()?;
                 let node = match_strict!(resp, ClientResponse::Node(node), node);
                 exec_command(stream, &node, command)?;

@@ -79,12 +79,15 @@ pub fn get_socket_path() -> String {
 pub fn is_streaming_response(response: &Response) -> bool {
     // we don't use catch-all to ensure this method is updated when a new response is added
     match response {
-        Response::ResultStream(ResultStatus::Pending, _) => true,
-        Response::ResultStream(_, _)
+        Response::ResultStream {
+            status: ResultStatus::Pending,
+            ..
+        } => true,
+        Response::ResultStream { status: _, .. }
         | Response::KeepAlive
-        | Response::Connect(_)
+        | Response::Connect { .. }
         | Response::NodeState(_)
         | Response::NodeUpdate(_)
-        | Response::Result(..) => false,
+        | Response::Result { .. } => false,
     }
 }

@@ -1614,6 +1614,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "secmon",
+ "secmon-http",
  "serde",
  "serde_json",
  "ureq",
@@ -1642,6 +1643,7 @@ dependencies = [
  "frankenstein",
  "iana-time-zone",
  "secmon",
+ "secmon-http",
 ]
 
 [[package]]

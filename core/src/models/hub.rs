@@ -11,16 +11,14 @@ use crate::models::node::{NodeUpdate, Sessions, WgPeers};
 use crate::models::packet::{Command, Response};
 use crate::utils::get_display_len;
 
-type ErrorMessage = String;
-
 /// Represents command sent in channel between local command and remote node handler.
 ///
 /// `Sender<Response>` is a one-time channel for node handler to return response to.
-/// 
-/// `ExpireTime` decides past what time should a channel packet be ignored.
+///
+/// `SystemTime` decides past what time should a channel packet be ignored.
 ///
 /// This is as if sending a mail with a return envelop attached.
-pub type ChannelPacket = (Command, Sender<Response>, ExpireTime);
+pub type ChannelPacket = (Command, Sender<Response>, SystemTime);
 /// Represents a vector of connected nodes.
 ///
 /// `Sender<ChannelPacket>` is a long-living channel to send local commands to.
@@ -78,39 +76,41 @@ impl fmt::Display for Node {
 pub enum ClientCommand {
     /// Subscribe to node state updates
     ///
-    /// Note: Client may not "unsubscribe". A separate
-    /// connection should be used to send other commands.
+    /// Note: Client may not "unsubscribe" without closing connection.
+    /// A separate connection should be used to send other commands.
     Subscribe,
 
-    /// List all connected nodes
-    List,
+    /// List all recently connected nodes
+    ListNodes,
 
-    /// Finds the first node matching address or hostname
-    FindNode(String),
+    /// Finds the first node matching serial, address or hostname
+    FindNode { query: String },
 
-    /// Wraps a raw packet command
-    RawCommand(Serial, Command, ExpireTime),
+    /// Raw command to be directly relayed to node
+    RawCommand {
+        node_serial: u32,
+        command: Command,
+        expire_time: SystemTime,
+    },
 }
-
-/// Serial number of a node
-pub type Serial = u32;
-/// Expire time of a raw command, after which the command
-/// should be ignored if not yet forwarded to node
-pub type ExpireTime = SystemTime;
 
 impl fmt::Display for ClientCommand {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::Subscribe => write!(f, "ClientCommand::Subscribe"),
-            Self::List => write!(f, "ClientCommand::List"),
-            Self::FindNode(query) => {
+            Self::ListNodes => write!(f, "ClientCommand::ListNodes"),
+            Self::FindNode { query } => {
                 write!(f, "ClientCommand::FindNode(query=\"{query}\")")
             }
-            Self::RawCommand(serial, command, expire_time) => {
+            Self::RawCommand {
+                node_serial,
+                command,
+                expire_time,
+            } => {
                 let expire_time_dt: DateTime<Utc> = (*expire_time).into();
                 write!(
                     f,
-                    "ClientCommand::RawCommand(serial={serial}, command={command}, expire_time=\"{expire_time_dt}\")"
+                    "ClientCommand::RawCommand(node_serial={node_serial}, command={command}, expire_time=\"{expire_time_dt}\")"
                 )
             }
         }
@@ -121,37 +121,37 @@ impl fmt::Display for ClientCommand {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum ClientResponse {
     /// Node state update, including tracked but not stored state
-    NodeUpdate(u32, NodeUpdate),
+    NodeUpdate { node_serial: u32, data: NodeUpdate },
 
-    /// A list of all connected nodes
-    List(Vec<Node>),
+    /// All recently connected nodes
+    Nodes(Vec<Node>),
 
-    /// A single node with its stored state
+    /// Single recently connected node
     Node(Node),
 
-    /// Wraps a raw packet response
+    /// Raw response directly relayed from node
     RawResponse(Response),
 
-    /// Generic failure with a string-based error
-    Failure(ErrorMessage),
+    /// Generic error
+    Error(String),
 }
 
 impl fmt::Display for ClientResponse {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::NodeUpdate(serial, update) => write!(
+            Self::NodeUpdate { node_serial, data } => write!(
                 f,
-                "ClientResponse::NodeUpdate(serial={serial}, data={update})"
+                "ClientResponse::NodeUpdate(node_serial={node_serial}, data={data})"
             ),
-            Self::List(nodes) => {
-                write!(f, "ClientResponse::List(nodes[{}])", nodes.len())
+            Self::Nodes(nodes) => {
+                write!(f, "ClientResponse::Nodes(len={})", nodes.len())
             }
-            Self::Node(node) => write!(f, "ClientResponse::Node(node={node})"),
+            Self::Node(node) => write!(f, "ClientResponse::{node}"),
             Self::RawResponse(response) => {
                 write!(f, "ClientResponse::RawResponse(response={response})")
             }
-            Self::Failure(error) => {
-                write!(f, "ClientResponse::Failure(error={:?})", error)
+            Self::Error(error) => {
+                write!(f, "ClientResponse::Error(error={:?})", error)
             }
         }
     }

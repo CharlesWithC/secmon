@@ -11,7 +11,7 @@ macro_rules! match_response {
     ( $action:expr, $response:expr, $pattern:pat, $return:expr ) => {
         match $response {
             $pattern => Ok($return),
-            ClientResponse::Failure(e) => Err(anyhow!("Unable to {}: {}", $action, e)),
+            ClientResponse::Error(e) => Err(anyhow!("Unable to {}: {}", $action, e)),
             _ => Err(anyhow!(
                 "Unable to {}: Invalid hub daemon response: {}",
                 $action,
@@ -25,8 +25,8 @@ macro_rules! match_response {
 pub fn is_streaming_command(command: &Command) -> bool {
     // we don't use catch-all to ensure this method is updated when a new response is added
     match command {
-        Command::Execute(_, true) => true,
-        Command::Execute(_, false) | Command::NodeState => false,
+        Command::Execute { stream: true, .. } => true,
+        Command::Execute { stream: false, .. } | Command::NodeState => false,
     }
 }
 
@@ -43,15 +43,15 @@ pub fn execute_command(command: &ClientCommand) -> Result<ClientResponse> {
 
 /// Returns result of finding a node.
 pub fn find_node(query: String) -> Result<Node> {
-    let resp = execute_command(&ClientCommand::FindNode(query))?;
+    let resp = execute_command(&ClientCommand::FindNode { query })?;
     let node = match_response!("find node", resp, ClientResponse::Node(node), node)?;
     Ok(node)
 }
 
 /// Returns all nodes connected to hub.
 pub fn list_nodes() -> Result<Vec<Node>> {
-    let resp = execute_command(&ClientCommand::List)?;
-    let nodes = match_response!("list nodes", resp, ClientResponse::List(nodes), nodes)?;
+    let resp = execute_command(&ClientCommand::ListNodes)?;
+    let nodes = match_response!("list nodes", resp, ClientResponse::Nodes(nodes), nodes)?;
     Ok(nodes)
 }
 
@@ -59,7 +59,16 @@ pub fn list_nodes() -> Result<Vec<Node>> {
 ///
 /// Note: Streaming result is not enabled. This will block until command execution completes.
 pub fn raw_command(node: &Node, command: Command) -> Result<Response> {
-    let resp = execute_command(&ClientCommand::RawCommand(node.serial, command, UNIX_EPOCH))?;
-    let resp = match_response!("raw command", resp, ClientResponse::RawResponse(resp), resp)?;
-    Ok(resp)
+    let raw_resp = execute_command(&ClientCommand::RawCommand {
+        node_serial: node.serial,
+        command,
+        expire_time: UNIX_EPOCH,
+    })?;
+    let response = match_response!(
+        "raw command",
+        raw_resp,
+        ClientResponse::RawResponse(response),
+        response
+    )?;
+    Ok(response)
 }

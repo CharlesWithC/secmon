@@ -3,7 +3,7 @@ use chrono_tz::Tz;
 
 use secmon::models::hub::Node;
 use secmon::models::node::{AuthLog, AuthLogDetail, NodeDataError, NodeUpdate};
-use secmon::models::packet::ResultStatus;
+use secmon::models::packet::{Response, ResultStatus};
 
 /// Returns node update parsed in user-friendly format.
 ///
@@ -27,36 +27,36 @@ pub fn parse_node_update(node: &Node, data: &NodeUpdate) -> Option<String> {
                 user,
                 detail,
             }) => match detail {
-                AuthLogDetail::SshConnect((host, port), method) => {
+                AuthLogDetail::SshConnect { host, port, method } => {
                     result += &format!(
                         "[SSH] <code>{user}</code> connected from <code>{host}:{port}</code> using {method}.\n"
                     )
                 }
-                AuthLogDetail::SshFailPassword((host, port)) => {
+                AuthLogDetail::SshFailPassword { host, port } => {
                     result += &format!(
                         "[SSH] <b>FAILED</b> password login attempt for <code>{user}</code> from <code>{host}:{port}</code>.\n"
                     )
                 }
-                AuthLogDetail::SshDisconnect((host, port)) => {
+                AuthLogDetail::SshDisconnect { host, port } => {
                     result += &format!(
                         "[SSH] <code>{user}</code> disconnected from <code>{host}:{port}</code>.\n"
                     )
                 }
-                AuthLogDetail::SuOpen(target) => {
+                AuthLogDetail::SuOpen { target_user } => {
                     result += &format!(
-                        "[SU] <code>{user}</code> opened session for <code>{target}</code> (pid=<code>{}</code>).\n",
+                        "[SU] <code>{user}</code> opened session for <code>{target_user}</code> (pid=<code>{}</code>).\n",
                         get_pid!(process)
                     )
                 }
-                AuthLogDetail::SuFail(target) => {
+                AuthLogDetail::SuFail { target_user } => {
                     result += &format!(
-                        "[SU] <code>{user}</code> FAILED to open session for <code>{target}</code> (pid=<code>{}</code>).\n",
+                        "[SU] <code>{user}</code> FAILED to open session for <code>{target_user}</code> (pid=<code>{}</code>).\n",
                         get_pid!(process)
                     )
                 }
-                AuthLogDetail::SuClose(target) => {
+                AuthLogDetail::SuClose { target_user } => {
                     result += &format!(
-                        "[SU] A session for <code>{target}</code> was closed (pid=<code>{}</code>).\n",
+                        "[SU] A session for <code>{target_user}</code> was closed (pid=<code>{}</code>).\n",
                         get_pid!(process)
                     )
                 }
@@ -178,28 +178,35 @@ pub fn parse_node_list(tz: &Tz, nodes: &Vec<Node>) -> Option<String> {
 }
 
 /// Returns exec result in user-friendly format.
-pub fn parse_result(node: &Node, (status, output): &(ResultStatus, String)) -> String {
-    let mut ret = format!("<b>{}</b> (<code>{}</code>)\n", node.hostname, node.address);
+pub fn parse_result(node: &Node, response: &Response) -> String {
+    match response {
+        Response::Result { status, output } => {
+            let mut ret = format!("<b>{}</b> (<code>{}</code>)\n", node.hostname, node.address);
 
-    let output = match output.as_str().trim() {
-        "" => "<i>No output</i>".to_owned(),
-        _ => format!("\n<code>{output}</code>"),
-    };
+            let output = match output.as_str().trim() {
+                "" => "<i>No output</i>".to_owned(),
+                _ => format!("\n<code>{output}</code>"),
+            };
 
-    match status {
-        ResultStatus::Timeout => {
-            ret += format!("⏰ Timeout: {}", output).as_str();
-        }
-        ResultStatus::Success => {
-            ret += format!("✅ Success: {}", output).as_str();
-        }
-        ResultStatus::Failure => {
-            ret += format!("❌ Failure: {}", output).as_str();
+            match status {
+                ResultStatus::Timeout => {
+                    ret += format!("⏰ Timeout: {}", output).as_str();
+                }
+                ResultStatus::Success => {
+                    ret += format!("✅ Success: {}", output).as_str();
+                }
+                ResultStatus::Failure => {
+                    ret += format!("❌ Failure: {}", output).as_str();
+                }
+                _ => {
+                    ret += format!("⚠️ Unknown Status: {output}").as_str(); // shouldn't happen
+                }
+            }
+
+            ret
         }
         _ => {
-            println!("Received invalid partial result: {output}")
+            format!("⚠️ Received unparsable result: {response}")
         }
     }
-
-    ret
 }

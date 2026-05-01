@@ -34,28 +34,43 @@ fn handle_exec_command(
                     timeout_kill: true,
                     status: _,
                     output,
-                } => Response::Result(ResultStatus::Timeout, output),
+                } => Response::Result {
+                    status: ResultStatus::Timeout,
+                    output,
+                },
                 ExecResult {
                     timeout_kill: false,
                     status,
                     output,
-                } if status.success() => Response::Result(ResultStatus::Success, output),
+                } if status.success() => Response::Result {
+                    status: ResultStatus::Success,
+                    output,
+                },
                 ExecResult {
                     timeout_kill: false,
                     status: _,
                     output,
-                } => Response::Result(ResultStatus::Failure, output),
+                } => Response::Result {
+                    status: ResultStatus::Failure,
+                    output,
+                },
             },
-            Err(error) => Response::Result(ResultStatus::Failure, error),
+            Err(error) => Response::Result {
+                status: ResultStatus::Failure,
+                output: error,
+            },
         })?;
     } else {
         macro_rules! stream_failure {
-            ( $sw_s:expr, $msg:expr ) => {{
-                sw_s.send(Response::ResultStream(ResultStatus::Pending, $msg))?;
-                sw_s.send(Response::ResultStream(
-                    ResultStatus::Failure,
-                    String::from(""),
-                ))?;
+            ( $sw_s:expr, $err:expr ) => {{
+                sw_s.send(Response::ResultStream {
+                    status: ResultStatus::Pending,
+                    line: $err,
+                })?;
+                sw_s.send(Response::ResultStream {
+                    status: ResultStatus::Failure,
+                    line: String::from(""),
+                })?;
             }};
         }
 
@@ -69,7 +84,10 @@ fn handle_exec_command(
                     let buf_reader = BufReader::new(reader);
 
                     for line in buf_reader.lines().map_while(Result::ok) {
-                        t_sw_s.send(Response::ResultStream(ResultStatus::Pending, line))?;
+                        t_sw_s.send(Response::ResultStream {
+                            status: ResultStatus::Pending,
+                            line,
+                        })?;
                     }
 
                     Ok(())
@@ -89,17 +107,17 @@ fn handle_exec_command(
                         timeout_kill,
                         status,
                     }) => match timeout_kill {
-                        true => sw_s.send(Response::ResultStream(
-                            ResultStatus::Timeout,
-                            String::from(""),
-                        ))?,
-                        false => sw_s.send(Response::ResultStream(
-                            match status.success() {
+                        true => sw_s.send(Response::ResultStream {
+                            status: ResultStatus::Timeout,
+                            line: String::from(""),
+                        })?,
+                        false => sw_s.send(Response::ResultStream {
+                            status: match status.success() {
                                 true => ResultStatus::Success,
                                 false => ResultStatus::Failure,
                             },
-                            String::from(""),
-                        ))?,
+                            line: String::from(""),
+                        })?,
                     },
                     Err(e) => {
                         stream_failure!(sw_s, format!("Failed to wait for '{program}': {e}"));
@@ -123,29 +141,35 @@ pub fn handle_command(
             let node_state = node_state_mutex.lock().unwrap();
             sw_s.send(Response::NodeState(node_state.clone()))?;
         }
-        Command::Execute(label, stream) => {
+        Command::Execute {
+            command_label,
+            stream,
+        } => {
             match get_env_var::<String>("COMMAND_ALLOWLIST_FILE", None).unwrap() {
                 None => {
-                    sw_s.send(Response::Result(
-                        ResultStatus::Failure,
-                        "Command allowlist not set (Missing env var: COMMAND_ALLOWLIST_FILE)"
-                            .to_owned(),
-                    ))?;
+                    sw_s.send(Response::Result {
+                        status: ResultStatus::Failure,
+                        output:
+                            "Command allowlist not set (Missing env var: COMMAND_ALLOWLIST_FILE)"
+                                .to_owned(),
+                    })?;
                 }
                 Some(allowlist_file) => match read_lines(allowlist_file.clone()) {
                     Err(e) => {
-                        sw_s.send(Response::Result(
-                            ResultStatus::Failure,
-                            format!(
+                        sw_s.send(Response::Result {
+                            status: ResultStatus::Failure,
+                            output: format!(
                                 "Unable to read '{allowlist_file}' (COMMAND_ALLOWLIST_FILE): {:?}",
                                 e
                             ),
-                        ))?;
+                        })?;
                     }
                     Ok(lines) => {
                         for line in lines.map_while(Result::ok) {
                             match line.split("=").collect::<Vec<_>>().as_slice() {
-                                [line_label, line_command_parts @ ..] if label == line_label => {
+                                [line_label, line_command_parts @ ..]
+                                    if command_label == line_label =>
+                                {
                                     let line_command = line_command_parts.join("=");
                                     match shlex::split(line_command.as_str()) {
                                         Some(parts) => {
@@ -155,12 +179,12 @@ pub fn handle_command(
                                             handle_exec_command(sw_s, command, *stream)?;
                                         }
                                         None => {
-                                            sw_s.send(Response::Result(
-                                                ResultStatus::Failure,
-                                                format!(
+                                            sw_s.send(Response::Result {
+                                                status: ResultStatus::Failure,
+                                                output: format!(
                                                     "Failed to parse command for '{line_label}'"
                                                 ),
-                                            ))?;
+                                            })?;
                                         }
                                     }
 
@@ -171,10 +195,10 @@ pub fn handle_command(
                         }
 
                         // no match
-                        sw_s.send(Response::Result(
-                            ResultStatus::Failure,
-                            format!("'{label}' is not an allowed command"),
-                        ))?;
+                        sw_s.send(Response::Result {
+                            status: ResultStatus::Failure,
+                            output: format!("'{command_label}' is not an allowed command"),
+                        })?;
                     }
                 },
             }

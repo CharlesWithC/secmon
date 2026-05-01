@@ -10,3 +10,4 @@ chrono-tz = "0.10.4"
 frankenstein = { version = "0.49.0", features = ["client-ureq"] }
 iana-time-zone = "0.1.65"
 secmon = { path = "../core" }
+secmon-http = { path = "../http" }

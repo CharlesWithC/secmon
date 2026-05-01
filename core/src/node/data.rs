@@ -121,7 +121,11 @@ pub fn parse_journalctl_log(line: String) -> Result<Option<AuthLog>> {
                 time,
                 process,
                 user: user.to_owned(),
-                detail: AuthLogDetail::SshConnect((host.to_owned(), port.parse()?), method.to_owned()),
+                detail: AuthLogDetail::SshConnect {
+                    host: host.to_owned(),
+                    port: port.parse()?,
+                    method: method.to_owned(),
+                },
             })),
         #[rustfmt::skip]
         ["Failed", "password", "for", user, "from", host, "port", port, ..] =>
@@ -129,7 +133,10 @@ pub fn parse_journalctl_log(line: String) -> Result<Option<AuthLog>> {
                 time,
                 process,
                 user: user.to_owned(),
-                detail: AuthLogDetail::SshFailPassword((host.to_owned(), port.parse()?)),
+                detail: AuthLogDetail::SshFailPassword {
+                    host: host.to_owned(),
+                    port: port.parse()?,
+                },
             })),
         #[rustfmt::skip]
         ["Disconnected", "from", "user", user, host, "port", port] =>
@@ -137,7 +144,10 @@ pub fn parse_journalctl_log(line: String) -> Result<Option<AuthLog>> {
                 time,
                 process,
                 user: user.to_owned(),
-                detail: AuthLogDetail::SshDisconnect((host.to_owned(), port.parse()?)),
+                detail: AuthLogDetail::SshFailPassword {
+                    host: host.to_owned(),
+                    port: port.parse()?,
+                },
             })),
         #[rustfmt::skip]
         ["pam_unix(su:session):", "session", "opened", "for", "user", target_user, "by", user] =>
@@ -145,24 +155,29 @@ pub fn parse_journalctl_log(line: String) -> Result<Option<AuthLog>> {
                 time,
                 process,
                 user: user.split("(").next().unwrap().to_owned(),
-                detail: AuthLogDetail::SuOpen(target_user.split("(").next().unwrap().to_owned()),
+                detail: AuthLogDetail::SuOpen {
+                    target_user: target_user.split("(").next().unwrap().to_owned(),
+                },
             })),
         #[rustfmt::skip]
-        ["FAILED", "SU", "(to", target_user, user, ..] => {
+        ["FAILED", "SU", "(to", target_user, user, ..] =>
             Ok(Some(AuthLog {
                 time,
                 process,
                 user: user.to_owned(),
-                detail: AuthLogDetail::SuFail(target_user[..target_user.len()-1].to_owned()),
-            }))
-        },
+                detail: AuthLogDetail::SuFail {
+                    target_user: target_user[..target_user.len() - 1].to_owned(),
+                },
+            })),
         #[rustfmt::skip]
         ["pam_unix(su:session):", "session", "closed", "for", "user", target_user] =>
             Ok(Some(AuthLog {
                 time,
                 process,
                 user: String::from(""),
-                detail: AuthLogDetail::SuClose(target_user.to_owned()),
+                detail: AuthLogDetail::SuClose {
+                    target_user: target_user.to_owned(),
+                },
             })),
         _ => Ok(None), // don't care if no match
     }

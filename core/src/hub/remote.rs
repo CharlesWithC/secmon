@@ -150,8 +150,11 @@ fn thread_main(
     let address = stream.peer_addr().unwrap();
     let hostname;
 
-    if let Response::Connect(_hostname) = stream.read::<Response>()? {
-        hostname = _hostname;
+    if let Response::Connect {
+        hostname: node_hostname,
+    } = stream.read::<Response>()?
+    {
+        hostname = node_hostname;
         (serial, cmd_receiver) = handle_new_node(hub_config, &address, &hostname, hub_state);
         println!("{address} ({hostname}) connected and was assigned serial {serial}");
     } else {
@@ -212,15 +215,15 @@ fn thread_main(
                 let resp = stream.read::<Response>()?;
 
                 match resp {
-                    Response::KeepAlive | Response::Connect(_) => {}
+                    Response::KeepAlive | Response::Connect { .. } => {}
                     _ => {
                         println!("{address} ({hostname}) responded {resp}");
                     }
                 }
 
                 match resp {
-                    Response::KeepAlive => {}  // don't care
-                    Response::Connect(_) => {} // should not occur
+                    Response::KeepAlive => {}      // don't care
+                    Response::Connect { .. } => {} // should not occur
                     Response::NodeUpdate(data) => {
                         broadcast_update(serial, &data, &hub_state);
                         update_hub_state(hub_config, serial, &address, &hostname, data, &hub_state);

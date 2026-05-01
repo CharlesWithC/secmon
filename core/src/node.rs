@@ -29,12 +29,12 @@ pub fn main(ip: IpAddr, port: u16, node_config: NodeConfig) -> Result<()> {
             last_connect_successful = true;
 
             // respond hostname on new connection
-            stream.write(&Response::Connect(
-                gethostname()
+            stream.write(&Response::Connect {
+                hostname: gethostname()
                     .to_str()
                     .map(|v| v.to_owned())
                     .unwrap_or(String::new()),
-            ))?;
+            })?;
 
             // sender & receiver for stream writer (`sw`)
             // everything to be sent to stream should be sent to `sw_s`

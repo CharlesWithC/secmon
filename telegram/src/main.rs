@@ -16,9 +16,9 @@ use secmon::models::hub::{ClientCommand, ClientResponse};
 use secmon::models::packet::Command;
 use secmon::traits::iosered::IOSerialized;
 use secmon::utils::{get_env_var, get_env_var_strict, get_socket_path, read_lines};
+use secmon_http::utils;
 
 mod parser;
-mod utils;
 
 const ARGS: [&str; 3] = ["help", "upd", "exec"];
 
@@ -75,7 +75,10 @@ fn thread_node_update(send_message: &impl Fn(Option<String>)) -> Result<()> {
             loop {
                 let resp = stream.read::<ClientResponse>()?;
                 match resp {
-                    ClientResponse::NodeUpdate(serial, data) => {
+                    ClientResponse::NodeUpdate {
+                        node_serial: serial,
+                        data,
+                    } => {
                         let node = utils::find_node(serial.to_string())?;
                         send_message(parser::parse_node_update(&node, &data));
                     }
@@ -110,7 +113,7 @@ fn handle_message(
                 return Ok(());
             }
 
-            let label = label.join(" ");
+            let command_label = label.join(" ");
 
             match get_env_var::<String>("COMMAND_ALLOWLIST_FILE", None).unwrap() {
                 None => {
@@ -129,8 +132,11 @@ fn handle_message(
                     }
                     Ok(lines) => {
                         for line in lines.map_while(Result::ok) {
-                            if label == line {
-                                let command = Command::Execute(label, false);
+                            if command_label == line {
+                                let command = Command::Execute {
+                                    command_label,
+                                    stream: false,
+                                };
 
                                 if node == &"-" {
                                     let nodes = utils::list_nodes()?;
@@ -142,12 +148,12 @@ fn handle_message(
                                             println!("");
                                         }
 
-                                        let result = utils::remote_exec(&node, command.clone())?;
+                                        let result = utils::raw_command(&node, command.clone())?;
                                         send_message(Some(parser::parse_result(&node, &result)));
                                     }
                                 } else {
                                     let node = utils::find_node((*node).to_owned())?;
-                                    let result = utils::remote_exec(&node, command)?;
+                                    let result = utils::raw_command(&node, command)?;
                                     send_message(Some(parser::parse_result(&node, &result)));
                                 }
 
@@ -155,7 +161,7 @@ fn handle_message(
                             }
                         }
 
-                        send_message(Some(format!("'{label}' is not an allowed command")));
+                        send_message(Some(format!("'{command_label}' is not an allowed command")));
                     }
                 },
             }

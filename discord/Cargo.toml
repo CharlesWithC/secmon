@@ -4,8 +4,9 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-secmon = { path = "../core" }
 anyhow = "1.0.102"
 ureq = { version = "3.3.0", features = ["json"] }
+secmon = { path = "../core" }
+secmon-http = { path = "../http" }
 serde = "1.0.228"
 serde_json = "1.0.149"

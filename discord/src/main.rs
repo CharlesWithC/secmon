@@ -8,10 +8,10 @@ use std::time::Duration;
 use secmon::models::hub::{ClientCommand, ClientResponse};
 use secmon::traits::iosered::IOSerialized;
 use secmon::utils::{get_env_var_strict, get_socket_path};
+use secmon_http::utils;
 
 mod models;
 mod parser;
-mod utils;
 use models::{Embed, Webhook};
 
 use crate::models::EmbedField;
@@ -66,7 +66,7 @@ fn main() {
                     loop {
                         let resp = stream.read::<ClientResponse>()?;
                         match resp {
-                            ClientResponse::NodeUpdate(serial, data) => {
+                            ClientResponse::NodeUpdate { node_serial: serial, data } => {
                                 let node = utils::find_node(serial.to_string())?;
                                 if let Some(embed) = parser::parse_node_update(&node, &data) {
                                     send_webhook(

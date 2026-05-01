@@ -30,6 +30,8 @@ Client 2 <-----------| |-----------> Node 2
 
 **Core** \[[README](/core/README.md)\]: The core `hub` and `node` daemon, plus a minimal viable implementation of cli client.
 
+**HTTP** \[[README](/http/README.md)\]: HTTP server integration that exposes unix-socket-based hub command interface over HTTP.
+
 **Telegram** \[[README](/telegram/README.md)\]: Telegram bot integration for single-user control and updates.
 
 **Discord** \[[README](/discord/README.md)\]: Discord webhook integration for single-webhook updates.
