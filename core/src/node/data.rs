@@ -144,7 +144,7 @@ pub fn parse_journalctl_log(line: String) -> Result<Option<AuthLog>> {
                 time,
                 process,
                 user: user.to_owned(),
-                detail: AuthLogDetail::SshFailPassword {
+                detail: AuthLogDetail::SshDisconnect {
                     host: host.to_owned(),
                     port: port.parse()?,
                 },

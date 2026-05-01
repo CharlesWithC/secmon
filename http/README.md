@@ -37,9 +37,11 @@ curl -X POST \
      http://localhost:9993/fury/execute
 
 # executes a raw command on fury
+# sets a 5 second wait timeout
 # note: streaming response not supported
 curl -X POST \
      -H "Content-Type: application/json" \
+     -H "Expires-In: 5" \
      -d '{"Execute": { "command_label": "reboot", "stream": false }}' \
      http://localhost:9993/fury/execute
 ```

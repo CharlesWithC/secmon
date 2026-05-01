@@ -48,6 +48,10 @@ fn handle_raw_command(
         }
         drop(guard);
 
+
+        // note: `resp_r.recv()` can fail when hub/remote ignore the command and `continue`
+        //       which drops `resp_s` and closes the channel
+
         loop {
             let response = resp_r.recv()?;
             let is_streaming = crate::utils::is_streaming_response(&response);
