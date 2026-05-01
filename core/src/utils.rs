@@ -67,11 +67,9 @@ where
 
 /// Returns the socket path that should be used for client communication.
 pub fn get_socket_path() -> String {
-    let uid = get_current_uid();
-    if uid == 0 {
-        return "/run/secmon.sock".to_owned();
-    } else {
-        return format!("/run/user/{uid}/secmon.sock");
+    match get_current_uid() {
+        0 => "/run/secmon.sock".to_owned(),
+        uid @ _ => format!("/run/user/{uid}/secmon.sock"),
     }
 }
 

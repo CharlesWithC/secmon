@@ -72,10 +72,9 @@ pub fn get_wg_peers() -> Result<Vec<WgPeer>, String> {
         wg_peers.push(WgPeer {
             interface: parts[0].to_owned(),
             peer: parts[1].to_owned(),
-            endpoint: if parts[2] != "(none)" {
-                Some(parts[2].to_owned())
-            } else {
-                None
+            endpoint: match parts[2] {
+                "(none)" => None,
+                endpoint @ _ => Some(endpoint.to_owned()),
             },
             latest_handshake: None,
         })

@@ -32,10 +32,9 @@ fn print_node(node: &Node) -> () {
         "{}: {} ({})",
         "node".green().bold(),
         node.hostname.green(),
-        if node.connected {
-            "connected".green()
-        } else {
-            "disconnected".red()
+        match node.connected {
+            true => "connected".green(),
+            false => "disconnected".red(),
         }
     );
     println!("  {}: {}", "serial".bold(), node.serial);
@@ -72,10 +71,9 @@ fn print_node(node: &Node) -> () {
                     .unwrap_or(0);
                 sessions.into_iter().for_each(|session| {
                     let dt: DateTime<Local> = session.login.into();
-                    let from = if let Some(from) = &session.from {
-                        format!("({from})")
-                    } else {
-                        format!("(/)")
+                    let from = match &session.from {
+                        Some(from) => format!("({from})"),
+                        None => format!("(/)"),
                     };
                     println!(
                         "  {user: <user_width$}{login: <7}{from}",

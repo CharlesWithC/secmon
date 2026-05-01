@@ -108,22 +108,21 @@ pub fn parse_node(tz: &Tz, node: &Node) -> String {
                     .max()
                     .unwrap_or(0);
                 sessions.into_iter().for_each(|session| {
-                        let dt: DateTime<Utc> = session.login.into();
-                        let dt: DateTime<Tz> = dt.with_timezone(tz);
-                        let from = if let Some(from) = &session.from {
-                            format!("({from})")
-                        } else {
-                            format!("(/)")
-                        };
-                        ret += format!(
-                            "  <code>{user: <user_width$}</code><code>{login: <7}</code><code>{from}</code>\n",
-                            user = session.user,
-                            user_width = max_user_len + 2,
-                            login = dt.format("%H:%M"),
-                            from = from
-                        )
-                        .as_str();
-                    });
+                    let dt: DateTime<Utc> = session.login.into();
+                    let dt: DateTime<Tz> = dt.with_timezone(tz);
+                    let from = match &session.from {
+                        Some(from) => format!("({from})"),
+                        None => format!("(/)"),
+                    };
+                    ret += format!(
+                        "  <code>{user: <user_width$}</code><code>{login: <7}</code><code>{from}</code>\n",
+                        user = session.user,
+                        user_width = max_user_len + 2,
+                        login = dt.format("%H:%M"),
+                        from = from
+                    )
+                    .as_str();
+                });
             }
         }
         Err(e) => ret += format_err!(e, "sessions").as_str(),
@@ -170,10 +169,9 @@ pub fn parse_node_list(tz: &Tz, nodes: &Vec<Node>) -> Option<String> {
     }
 
     ret = ret.as_str().trim().to_owned();
-    if ret == String::new() {
-        None
-    } else {
-        Some(ret)
+    match ret.as_str() {
+        "" => None,
+        _ => Some(ret),
     }
 }
 

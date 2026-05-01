@@ -10,7 +10,7 @@ use std::env;
 use std::os::unix::net::UnixStream;
 use std::process;
 use std::thread;
-use std::time::{Duration, UNIX_EPOCH};
+use std::time::Duration;
 
 use secmon::models::hub::{ClientCommand, ClientResponse};
 use secmon::models::packet::Command;
@@ -148,13 +148,12 @@ fn handle_message(
                                             println!("");
                                         }
 
-                                        let result =
-                                            utils::raw_command(&node, command.clone(), UNIX_EPOCH)?;
+                                        let result = utils::raw_command(&node, command.clone(), 0)?;
                                         send_message(Some(parser::parse_result(&node, &result)));
                                     }
                                 } else {
                                     let node = utils::find_node((*node).to_owned())?;
-                                    let result = utils::raw_command(&node, command, UNIX_EPOCH)?;
+                                    let result = utils::raw_command(&node, command, 0)?;
                                     send_message(Some(parser::parse_result(&node, &result)));
                                 }
 
