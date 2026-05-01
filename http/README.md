@@ -2,7 +2,7 @@
 
 HTTP server integration that exposes unix-socket-based hub command interface over HTTP.
 
-This integration should allow clients written in other programming languages to easily communicate with the hub daemon, as the HTTP server handles translating json serialization to postcard binary serialization.
+This integration should allow clients written in other programming languages to easily communicate with the hub daemon, as the HTTP server handles translation between json serialization and postcard binary serialization.
 
 ## Basic Usage
 
@@ -13,6 +13,7 @@ The server binds to `127.0.0.1:9993` by default, but you may change it with `SER
 Sample requests:
 
 ```bash
+curl http://localhost:9993/subscribe            # subscribe to node updates (websocket)
 curl http://localhost:9993/list                 # lists all nodes
 curl http://localhost:9993/fury                 # fetchs info about 'fury'
 curl -X POST \
