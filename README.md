@@ -1,6 +1,6 @@
 # SecMon
 
-An std-only high-performance tool for monitoring security attributes on multiple servers, plus executing commands remotely based on an allowlist.
+A high-performance tool for monitoring security attributes on multiple servers, plus executing commands remotely based on an allowlist.
 
 This is a mini distributed system experiment, where remote nodes communicates with hub, and hub communicates with terminal clients.
 
