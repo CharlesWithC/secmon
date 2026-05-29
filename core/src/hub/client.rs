@@ -202,7 +202,7 @@ pub fn main(stream: &mut UnixStream, command: String) -> Result<()> {
             stream.write(&ClientCommand::ListNodes)?;
             let resp = stream.read::<ClientResponse>()?;
             let mut nodes = match_strict!(resp, ClientResponse::Nodes(nodes), nodes);
-            nodes.sort_by(|a, b| a.address.cmp(&b.address));
+            nodes.sort_by(|a, b| a.hostname.cmp(&b.hostname));
 
             for (i, node) in nodes.iter().enumerate() {
                 if i != 0 {
