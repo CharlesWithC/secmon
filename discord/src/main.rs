@@ -34,14 +34,16 @@ fn send_webhook(uri: &String, body: &Webhook) -> () {
 }
 
 fn main() {
-    let webhook = get_env_var_strict::<String>("DISCORD_WEBHOOK_URL", None);
-    let content = get_env_var_strict("DISCORD_MESSAGE_CONTENT", Some(String::from("")));
-
     let args: Vec<String> = env::args().collect();
     if args.len() == 2 && args[1] == "help" {
         println!("{USAGE}");
         process::exit(0);
-    } else if args.len() == 2 && args[1] == "test" {
+    }
+
+    let webhook = get_env_var_strict::<String>("DISCORD_WEBHOOK_URL", None);
+    let content = get_env_var_strict("DISCORD_MESSAGE_CONTENT", Some(String::from("")));
+
+    if args.len() == 2 && args[1] == "test" {
         let body = Webhook {
             content: content,
             embeds: vec![Embed {
