@@ -12,6 +12,7 @@ use crate::models::NodeConfig;
 use crate::models::node::{NodeDataError, NodeState};
 use crate::models::packet::{Command, Response};
 use crate::traits::iosered::IOSerialized;
+use crate::utils::get_env_var_strict;
 
 /// Node-side main function to communicate with hub.
 ///
@@ -30,10 +31,10 @@ pub fn main(ip: IpAddr, port: u16, node_config: NodeConfig) -> Result<()> {
 
             // respond hostname on new connection
             stream.write(&Response::Connect {
-                hostname: gethostname()
-                    .to_str()
-                    .map(|v| v.to_owned())
-                    .unwrap_or(String::new()),
+                hostname: get_env_var_strict(
+                    "NODE_HOSTNAME",
+                    Some(gethostname().to_string_lossy().into_owned()),
+                ),
             })?;
 
             // sender & receiver for stream writer (`sw`)

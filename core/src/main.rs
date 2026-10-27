@@ -33,6 +33,7 @@ Environment:
                 if true, reconnected node would replace disconnected node
                 otherwise, reconnected node would be considered a new node
   node:     HUB_IP=<ip> HUB_PORT=<port>         (default: 127.0.0.1:9992)
+            NODE_HOSTNAME=<hostname>            (default: system hostname)
             COMMAND_ALLOWLIST_FILE=<path>       (default: none)
             COMMAND_EXECUTE_TIMEOUT=<seconds>   (default: 0 (disabled))
                 time to wait executing command before killing child process
