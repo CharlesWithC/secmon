@@ -1,10 +1,10 @@
 use anyhow::{Result, anyhow};
-use std::net::{IpAddr, TcpListener};
+use std::net::TcpListener;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-use crate::models::HubConfig;
+use crate::config::{CONFIG, HubConfig, get_config};
 use crate::models::hub::{HubNodes, HubStateMutex, SubscribedClients};
 
 mod client;
@@ -21,18 +21,19 @@ mod remote;
 /// Hub daemon main function for handling remote node connections and local client commands.
 ///
 /// This is a blocking function and does not exit unless interrupted.
-pub fn main_daemon(
-    hub_config: HubConfig,
-    ip: IpAddr,
-    port: u16,
-    socket_path: String,
-) -> Result<()> {
+pub fn main_daemon(socket_path: String) -> Result<()> {
     let listener_local = UnixListener::bind(&socket_path)
         .map_err(|e| anyhow!("Unable to bind {socket_path}: {e}"))?;
     println!("Listening on {socket_path} for client commands");
 
+    let HubConfig {
+        bind_ip: ip,
+        bind_port: port,
+        ..
+    } = get_config!(hub);
+
     let listener_remote =
-        TcpListener::bind((ip, port)).map_err(|e| anyhow!("Unable to bind {ip}:{port}: {e}"))?;
+        TcpListener::bind((*ip, *port)).map_err(|e| anyhow!("Unable to bind {ip}:{port}: {e}"))?;
     println!("Listening on {ip}:{port} for nodes");
 
     let hub_state: HubStateMutex =
@@ -46,7 +47,7 @@ pub fn main_daemon(
 
         let hub_state_remote: HubStateMutex = Arc::clone(&hub_state);
         s.spawn(move || {
-            remote::main(hub_config, listener_remote, hub_state_remote);
+            remote::main(listener_remote, hub_state_remote);
         });
     });
 
@@ -58,9 +59,9 @@ pub fn main_daemon(
 /// The command is read from command line arguments.
 ///
 /// This may be a blocking function depending on the command.
-pub fn main_client(socket_path: String, command: String) -> Result<()> {
+pub fn main_client(command: String, socket_path: String) -> Result<()> {
     match UnixStream::connect(socket_path) {
-        Ok(ref mut stream) => client::main(stream, command),
+        Ok(ref mut stream) => client::main(command, stream),
         Err(e) => Err(anyhow!("Unable to connect to hub daemon: {e}")),
     }
 }

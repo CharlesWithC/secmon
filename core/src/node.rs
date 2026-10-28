@@ -1,40 +1,42 @@
 use anyhow::{Result, anyhow};
 use crossbeam_channel::unbounded;
-use gethostname::gethostname;
-use std::net::{IpAddr, TcpStream};
+use std::net::TcpStream;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, SystemTime};
 
 mod data;
 mod handler;
-use crate::models::NodeConfig;
+use crate::config::{CONFIG, NodeConfig, get_config};
 use crate::models::node::{NodeDataError, NodeState};
 use crate::models::packet::{Command, Response};
 use crate::traits::iosered::IOSerialized;
-use crate::utils::get_env_var_strict;
 
 /// Node-side main function to communicate with hub.
 ///
 /// This is a blocking function and does not exit unless interrupted.
-pub fn main(ip: IpAddr, port: u16, node_config: NodeConfig) -> Result<()> {
+pub fn main() -> Result<()> {
     // only print error when last connect is successful
     // otherwise, retry silently, if applicable
     // note: initialize to true to print first error
     let mut last_connect_successful = true;
     loop {
+        let node_config = get_config!(node);
+        let NodeConfig {
+            hub_ip: ip,
+            hub_port: port,
+            ..
+        } = node_config;
+
         let result = thread::scope(|s| {
-            let mut stream = TcpStream::connect((ip, port))?;
+            let mut stream = TcpStream::connect((*ip, *port))?;
             println!("Connected to hub {ip}:{port}");
 
             last_connect_successful = true;
 
             // respond hostname on new connection
             stream.write(&Response::Connect {
-                hostname: get_env_var_strict(
-                    "NODE_HOSTNAME",
-                    Some(gethostname().to_string_lossy().into_owned()),
-                ),
+                hostname: node_config.hostname.clone()
             })?;
 
             // sender & receiver for stream writer (`sw`)
@@ -88,8 +90,7 @@ pub fn main(ip: IpAddr, port: u16, node_config: NodeConfig) -> Result<()> {
                         }
 
                         // update node state
-                        let (updated, data) =
-                            handler::update_node_state(node_config, &node_state_mutex);
+                        let (updated, data) = handler::update_node_state(&node_state_mutex);
                         if updated {
                             sw_s.send(Response::NodeUpdate(data))?;
                         }
@@ -107,7 +108,7 @@ pub fn main(ip: IpAddr, port: u16, node_config: NodeConfig) -> Result<()> {
                 });
             }
 
-            if node_config.enable_auth_log {
+            if node_config.resources.iter().any(|s| s == "auth") {
                 // thread that tracks `journalctl` for updates
                 // note: to terminate this thread, set `terminate_flag` to `true`
                 //       and then kill the journalctl child process; killing without
@@ -127,7 +128,7 @@ pub fn main(ip: IpAddr, port: u16, node_config: NodeConfig) -> Result<()> {
                         }
 
                         let success =
-                            handler::handle_journalctl(node_config, &sw_s, &child_opt_mutex);
+                            handler::handle_journalctl(&sw_s, &child_opt_mutex);
                         if !success {
                             // error is relayed to hub; do not retry on error
                             return;

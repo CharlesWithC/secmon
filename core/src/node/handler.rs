@@ -6,11 +6,10 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
-use crate::models::NodeConfig;
+use crate::config::{CONFIG, get_config};
 use crate::models::node::{NodeDataError, NodeStateMutex, NodeUpdate};
 use crate::models::packet::{Command, Response, ResultStatus};
 use crate::traits::exec::{ChildWait, CommandExec, ExecResult, WaitResult};
-use crate::utils::{get_env_var, get_env_var_strict, read_lines};
 
 /// Handles raw command execution.
 fn handle_exec_command(
@@ -18,11 +17,12 @@ fn handle_exec_command(
     command: process::Command,
     stream: bool,
 ) -> Result<()> {
+    let node_config = get_config!(node);
+
     let program = command.get_program().to_str().unwrap().to_owned();
-    let timeout_sec = get_env_var_strict("COMMAND_EXECUTE_TIMEOUT", Some(0));
-    let timeout = match timeout_sec {
+    let timeout = match node_config.command_execute_timeout {
         0 => None,
-        _ => Some(Duration::from_secs(timeout_sec)),
+        sec @ _ => Some(Duration::from_secs(sec)),
     };
 
     if !stream {
@@ -145,62 +145,27 @@ pub fn handle_command(
             command_label,
             stream,
         } => {
-            match get_env_var::<String>("COMMAND_ALLOWLIST_FILE", None).unwrap() {
-                None => {
-                    sw_s.send(Response::Result {
-                        status: ResultStatus::Failure,
-                        output:
-                            "Command allowlist not set (Missing env var: COMMAND_ALLOWLIST_FILE)"
-                                .to_owned(),
-                    })?;
-                }
-                Some(allowlist_file) => match read_lines(allowlist_file.clone()) {
-                    Err(e) => {
-                        sw_s.send(Response::Result {
-                            status: ResultStatus::Failure,
-                            output: format!(
-                                "Unable to read '{allowlist_file}' (COMMAND_ALLOWLIST_FILE): {:?}",
-                                e
-                            ),
-                        })?;
+            let node_config = get_config!(node);
+            match node_config.command_allowlist.get(command_label) {
+                Some(command) => match shlex::split(command.as_str()) {
+                    Some(parts) => {
+                        let mut command = process::Command::new(parts[0].as_str());
+                        command.args(parts[1..].to_vec());
+                        handle_exec_command(sw_s, command, *stream)?;
                     }
-                    Ok(lines) => {
-                        for line in lines.map_while(Result::ok) {
-                            match line.split("=").collect::<Vec<_>>().as_slice() {
-                                [line_label, line_command_parts @ ..]
-                                    if command_label == line_label =>
-                                {
-                                    let line_command = line_command_parts.join("=");
-                                    match shlex::split(line_command.as_str()) {
-                                        Some(parts) => {
-                                            let mut command =
-                                                process::Command::new(parts[0].as_str());
-                                            command.args(parts[1..].to_vec());
-                                            handle_exec_command(sw_s, command, *stream)?;
-                                        }
-                                        None => {
-                                            sw_s.send(Response::Result {
-                                                status: ResultStatus::Failure,
-                                                output: format!(
-                                                    "Failed to parse command for '{line_label}'"
-                                                ),
-                                            })?;
-                                        }
-                                    }
-
-                                    return Ok(());
-                                }
-                                _ => {} // don't care if no match
-                            }
-                        }
-
-                        // no match
+                    None => {
                         sw_s.send(Response::Result {
                             status: ResultStatus::Failure,
-                            output: format!("'{command_label}' is not an allowed command"),
+                            output: format!("Failed to parse command for '{command_label}'"),
                         })?;
                     }
                 },
+                None => {
+                    sw_s.send(Response::Result {
+                        status: ResultStatus::Failure,
+                        output: format!("'{command_label}' is not an allowed command"),
+                    })?;
+                }
             }
         }
     };
@@ -211,15 +176,22 @@ pub fn handle_command(
 /// Fetches and updates stored `node_state` in place.
 ///
 /// Returns whether some update is made, and atomic update of new state.
-pub fn update_node_state(
-    node_config: NodeConfig,
-    node_state_mutex: &NodeStateMutex,
-) -> (bool, NodeUpdate) {
+pub fn update_node_state(node_state_mutex: &NodeStateMutex) -> (bool, NodeUpdate) {
+    let node_config = get_config!(node);
+
+    /// Function to map resource label to node state label.
+    fn map_resource(resource: &str) -> &str {
+        match resource {
+            "who" => "sessions",
+            "wg" => "wg_peers",
+            _ => "",
+        }
+    }
+
     /// Macro to fetch updates based on `node_config`.
     macro_rules! fetch_updates {
-        ( $( $attr:ident ),* ) => {
-            paste::paste! {
-            $(let $attr = if node_config.[<enable_ $attr>] {
+        ( $( $attr:ident ),* ) => { paste::paste! {
+            $(let $attr = if node_config.resources.iter().any(|s| map_resource(s) == "$attr") {
                 let result = crate::node::data::[<get_ $attr>]();
                 match result {
                     // repack the result to use NodeStateError
@@ -276,10 +248,11 @@ macro_rules! wait_child {
 ///
 /// This is a blocking function and does not exit until child process is killed.
 fn run_journalctl(
-    node_config: NodeConfig,
     sw_s: &Sender<Response>,
     child_opt_mutex: &Arc<Mutex<Option<process::Child>>>,
 ) -> Result<()> {
+    let node_config = get_config!(node);
+
     let mut args = vec![
         "-f", // block and print updates
         "-n",
@@ -288,7 +261,7 @@ fn run_journalctl(
         "short-iso",
         "-q", // stay quiet on warning message
     ]; // base args
-    if node_config.enable_auth_log {
+    if node_config.resources.iter().any(|s| s == "auth") {
         args.extend([
             "-t",
             "sshd", // old sshd identifier
@@ -362,11 +335,10 @@ fn run_journalctl(
 ///
 /// This is a blocking function and does not exit until child process is killed.
 pub fn handle_journalctl(
-    node_config: NodeConfig,
     sw_s: &Sender<Response>,
     child_opt_mutex: &Arc<Mutex<Option<process::Child>>>,
 ) -> bool {
-    let result = run_journalctl(node_config, sw_s, child_opt_mutex);
+    let result = run_journalctl(sw_s, child_opt_mutex);
     if let Err(e) = result {
         let _ = sw_s.send(Response::NodeUpdate(NodeUpdate {
             sessions: None,

@@ -52,12 +52,12 @@ pub fn get_sessions() -> Result<Vec<Session>, String> {
 
 /// Executes `wg` twice and returns parsed result.
 ///
+/// Note: `wg show` only supports one attribute in each run, with output
+/// format (interface, peer, <attribute>); thus, we run `wg show` twice
+/// with different arguments.
+///
 /// If an error occurs, returns a string-based error.
 pub fn get_wg_peers() -> Result<Vec<WgPeer>, String> {
-    // `wg show` only supports one attribute in each run
-    // the output format is (interface, peer, <attribute>)
-    // thus, we run `wg show` twice with different arguments
-
     let mut wg_peers = Vec::<WgPeer>::new();
 
     let mut command = Command::new("wg");

@@ -5,11 +5,11 @@ use colored::Colorize;
 use std::os::unix::net::UnixStream;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use crate::config::{CONFIG, get_config};
 use crate::models::hub::{ClientCommand, ClientResponse, Node};
 use crate::models::node::NodeDataError;
 use crate::models::packet::{Command, Response, ResultStatus};
 use crate::traits::iosered::IOSerialized;
-use crate::utils::get_env_var_strict;
 
 macro_rules! match_strict {
     ( $response:expr, $pattern:pat, $return:expr ) => {
@@ -108,7 +108,7 @@ fn print_node(node: &Node) -> () {
 
 /// Executes command on a specific node and streams result.
 fn exec_command(stream: &mut UnixStream, node: &Node, command: Command) -> Result<()> {
-    let mut wait_timeout = get_env_var_strict("NODE_WAIT_TIMEOUT", Some(0));
+    let mut wait_timeout = get_config!(client).node_wait_timeout;
     let expire_time = match wait_timeout {
         0 => UNIX_EPOCH,
         _ => SystemTime::now() + Duration::from_secs(wait_timeout),
@@ -186,7 +186,7 @@ fn exec_command(stream: &mut UnixStream, node: &Node, command: Command) -> Resul
 /// Main function for command line client.
 ///
 /// Note: This is a minimal viable implementation.
-pub fn main(stream: &mut UnixStream, command: String) -> Result<()> {
+pub fn main(command: String, stream: &mut UnixStream) -> Result<()> {
     match command.split_whitespace().collect::<Vec<_>>().as_slice() {
         ["subscribe"] => {
             println!("Node state atomic updates will be printed in terminal.");

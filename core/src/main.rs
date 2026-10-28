@@ -1,19 +1,21 @@
-use anyhow::{Result, anyhow};
+use anyhow::{Result, anyhow, bail};
+use gethostname::gethostname;
 use std::fs;
+use std::path::Path;
 use std::{env, process};
 
+mod config;
 mod hub;
 mod models;
 mod node;
 mod traits;
 mod utils;
-use crate::models::{DEFAULT_IP, DEFAULT_PORT, HubConfig, LaunchArgs, NodeConfig};
-use crate::utils::{get_env_var_strict, get_socket_path};
+use crate::config::{CONFIG, Config, VERBOSE};
+use crate::utils::{get_env_var, get_socket_path};
 
 const USAGE: &str = "Usage:
   secmon hub                        launch hub daemon
-  secmon node [who] [wg] [auth]     launch node daemon
-    [--reconnect]
+  secmon node                       launch node daemon
   secmon help                       show this help message
 
 Utility commands:
@@ -25,33 +27,85 @@ Utility commands:
   <node> can be serial, address, hostname. Use \"-\" for all connected nodes.
   Due to sync design, each node can only handle one command at a time.
 
-Environment:
-  hub:      BIND_IP=<ip> BIND_PORT=<port>       (default: 127.0.0.1:9992)
-            DISCONNECT_GRACE_PERIOD=<seconds>   (default: 300)
-                when to remove a disconnected node, if not replaced
-            ASSUME_HOSTNAME_UNIQUE=<true|false> (default: true)
-                if true, reconnected node would replace disconnected node
-                otherwise, reconnected node would be considered a new node
-  node:     HUB_IP=<ip> HUB_PORT=<port>         (default: 127.0.0.1:9992)
-            NODE_HOSTNAME=<hostname>            (default: system hostname)
-            COMMAND_ALLOWLIST_FILE=<path>       (default: none)
-            COMMAND_EXECUTE_TIMEOUT=<seconds>   (default: 0 (disabled))
-                time to wait executing command before killing child process
-  client:   NODE_WAIT_TIMEOUT=<seconds>         (default: 0 (disabled))
-                time to wait forwarding command before aborting execution
+Options:
+  -c, --config <file>               specify a config file, otherwise tries:
+                                    $XDG_CONFIG_HOME/secmon/config.toml,
+                                    /etc/secmon/config.toml in order by default
+  -v, --verbose                     verbose mode
+";
 
-COMMAND_ALLOWLIST_FILE:
-  A file containing commands that may be executed by hub.
-  Separate label and command with '=', and provide one pair in each line.
-  Label must not contain '=', and command must finish in one line.
-  Examples:
-    LABEL=COMMAND
-    update=apt update -y
-    reboot=shutdown -r";
+/// Locates and loads configuration file.
+///
+/// Note: This also handles -v / --verbose command line argument.
+fn load_config(args: &Vec<String>) -> Result<()> {
+    let mut config_path: Option<String> = None;
 
-fn launch(launch_args: LaunchArgs) -> Result<()> {
-    match launch_args {
-        LaunchArgs::Hub(ip, port, hub_config) => {
+    // try -c/--config argument
+    let mut it = args.iter();
+    while let Some(arg) = it.next() {
+        if arg == "-c" || arg == "--config" {
+            if !config_path.is_none() {
+                bail!("Duplicate '-c' argument detected. Provide only one config file.");
+            }
+
+            let Some(path) = it.next() else {
+                bail!("Invalid '-c' argument. Provide a config file.");
+            };
+            if !Path::new(path).exists() {
+                bail!("Config file does not exist: {path}");
+            }
+            config_path = Some(path.clone());
+        }
+        if arg == "-v" || arg == "--verbose" {
+            VERBOSE.set(true).ok();
+        }
+    }
+
+    // try $XDG_CONFIG_HOME/secmon/config.toml and /etc/secmon/config.toml
+    if config_path.is_none() {
+        let mut try_paths: Vec<String> = vec![];
+
+        if let Ok(Some(config_home)) = get_env_var::<String>("XDG_CONFIG_HOME", None) {
+            try_paths.push(config_home + "/secmon/config.toml");
+        } else if let Ok(Some(home)) = get_env_var::<String>("HOME", None) {
+            try_paths.push(home + "/.config/secmon/config.toml");
+        }
+        try_paths.push("/etc/secmon/config.toml".to_owned());
+
+        for path in try_paths.iter() {
+            if Path::new(path).exists() {
+                config_path = Some(path.clone());
+                break;
+            }
+        }
+    }
+
+    let Some(config_path) = config_path else {
+        bail!("Unable to find a config file. Specify one with '-c' argument.");
+    };
+
+    let config_raw = fs::read_to_string(&config_path)
+        .map_err(|e| anyhow!("Unable to read config file at {config_path}: {e}"))?;
+
+    println!("Using config file at {config_path}");
+
+    let mut parsed_config: Config =
+        toml::from_str(&config_raw).map_err(|e| anyhow!("Unable to parse config file: {e}"))?;
+    if parsed_config.node.hostname == "" {
+        parsed_config.node.hostname = gethostname().to_string_lossy().into_owned();
+    }
+
+    vprintln!("{:?}", parsed_config);
+
+    CONFIG
+        .set(parsed_config)
+        .map_err(|_| panic!("Error when initializing config"))
+}
+
+/// Wrapped "real" main to return errors if any.
+fn launch(args: &Vec<String>) -> Result<()> {
+    match args.get(1).unwrap().as_str() {
+        "hub" => {
             let socket_path = get_socket_path();
             if fs::exists(&socket_path)
                 .map_err(|e| anyhow!("Unable to access {socket_path}: {e}"))?
@@ -60,9 +114,29 @@ fn launch(launch_args: LaunchArgs) -> Result<()> {
                     .map_err(|e| anyhow!("Unable to unlink {socket_path}: {e}"))?;
             }
 
-            crate::hub::main_daemon(hub_config, ip, port, socket_path)?;
+            crate::hub::main_daemon(socket_path)?;
         }
-        LaunchArgs::Client(command) => {
+        "node" => {
+            crate::node::main()?;
+        }
+        _ => {
+            let mut args = args.clone();
+            let mut skip_next = false;
+            args.retain(|a| {
+                if std::mem::take(&mut skip_next) {
+                    return false; // value belonging to -c/--config
+                }
+                match a.as_str() {
+                    "-v" | "--verbose" => false,
+                    "-c" | "--config" => {
+                        skip_next = true;
+                        false
+                    }
+                    _ => true,
+                }
+            });
+            let command = args[1..].join(" ");
+
             let socket_path = get_socket_path();
             if !fs::exists(&socket_path)
                 .map_err(|e| anyhow!("Unable to access {socket_path}: {e}"))?
@@ -72,10 +146,7 @@ fn launch(launch_args: LaunchArgs) -> Result<()> {
                 ));
             }
 
-            crate::hub::main_client(socket_path, command)?;
-        }
-        LaunchArgs::Node(ip, port, node_config) => {
-            crate::node::main(ip, port, node_config)?;
+            crate::hub::main_client(command, socket_path)?;
         }
     }
 
@@ -85,56 +156,17 @@ fn launch(launch_args: LaunchArgs) -> Result<()> {
 fn main() {
     let args: Vec<String> = env::args().collect();
 
-    if args.len() < 2 {
+    if args.len() < 2 || args.get(1).unwrap() == "help" {
         println!("{USAGE}");
-        process::exit(1);
+        return;
     }
 
-    let launch_args = match args.get(1).unwrap().as_str() {
-        "hub" => {
-            let ip = get_env_var_strict("BIND_IP", Some(DEFAULT_IP));
-            let port = get_env_var_strict("BIND_PORT", Some(DEFAULT_PORT));
+    load_config(&args).unwrap_or_else(|e| {
+        eprintln!("{e}");
+        process::exit(1);
+    });
 
-            let disconnect_grace_period = get_env_var_strict("DISCONNECT_GRACE_PERIOD", Some(300));
-            let assume_hostname_unique = get_env_var_strict("ASSUME_HOSTNAME_UNIQUE", Some(true));
-
-            LaunchArgs::Hub(
-                ip,
-                port,
-                HubConfig {
-                    disconnect_grace_period,
-                    assume_hostname_unique,
-                },
-            )
-        }
-        "node" => {
-            let ip = get_env_var_strict("HUB_IP", Some(DEFAULT_IP));
-            let port = get_env_var_strict("HUB_PORT", Some(DEFAULT_PORT));
-
-            let reconnect = args.contains(&"--reconnect".to_owned());
-            let enable_sessions = args.contains(&"who".to_owned());
-            let enable_wg_peers = args.contains(&"wg".to_owned());
-            let enable_auth_log = args.contains(&"auth".to_owned());
-
-            LaunchArgs::Node(
-                ip,
-                port,
-                NodeConfig {
-                    reconnect,
-                    enable_sessions,
-                    enable_wg_peers,
-                    enable_auth_log,
-                },
-            )
-        }
-        "help" => {
-            println!("{USAGE}");
-            process::exit(0);
-        }
-        _ => LaunchArgs::Client(args.into_iter().skip(1).collect::<Vec<_>>().join(" ")),
-    };
-
-    if let Err(e) = launch(launch_args) {
+    if let Err(e) = launch(&args) {
         eprintln!("{e}");
         process::exit(1);
     } else {
