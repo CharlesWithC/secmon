@@ -10,13 +10,16 @@ use crate::traits::exec::CommandExec;
 ///
 /// If an error occurs, returns a string-based error.
 pub fn get_sessions() -> Result<Vec<Session>, String> {
-    let mut command = Command::new("who");
-    command.args(["-w"]).env("LC_ALL", "C.UTF-8");
-    let output = command.run(None)?.output;
-
     let mut sessions = Vec::<Session>::new();
 
-    for line in output.lines() {
+    let mut command = Command::new("who");
+    command.args(["-w"]).env("LC_ALL", "C.UTF-8");
+    let res_who = command.run(None)?;
+    if !res_who.status.success() {
+        return Err(format!("{}", res_who));
+    }
+
+    for line in res_who.output.lines() {
         let parts = line.split_whitespace().collect::<Vec<_>>();
         if parts.len() < 3 {
             return Err(format!("command 'who' did not produce a valid output"));
@@ -62,8 +65,13 @@ pub fn get_wg_peers() -> Result<Vec<WgPeer>, String> {
 
     let mut command = Command::new("wg");
     command.args(["show", "all", "endpoints"]);
-    let output_endpoints = command.run(None)?.output;
-    for line in output_endpoints.lines() {
+
+    let res_endpoints = command.run(None)?;
+    if !res_endpoints.status.success() {
+        return Err(format!("{}", res_endpoints));
+    }
+
+    for line in res_endpoints.output.lines() {
         let parts = line.split_whitespace().collect::<Vec<_>>();
         if parts.len() < 3 {
             return Err(format!("command 'wg' did not produce a valid output"));
@@ -82,8 +90,12 @@ pub fn get_wg_peers() -> Result<Vec<WgPeer>, String> {
 
     let mut command = Command::new("wg");
     command.args(["show", "all", "latest-handshakes"]);
-    let output_handshake = command.run(None)?.output;
-    for line in output_handshake.lines() {
+    let res_handshake = command.run(None)?;
+    if !res_handshake.status.success() {
+        return Err(format!("{}", res_handshake));
+    }
+
+    for line in res_handshake.output.lines() {
         let parts = line.split_whitespace().collect::<Vec<_>>();
         if parts.len() < 3 {
             return Err(format!("command 'wg' did not produce a valid output"));

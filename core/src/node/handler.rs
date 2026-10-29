@@ -9,7 +9,7 @@ use std::time::Duration;
 use crate::config::{CONFIG, get_config};
 use crate::models::node::{NodeDataError, NodeStateMutex, NodeUpdate};
 use crate::models::packet::{Command, Response, ResultStatus};
-use crate::traits::exec::{ChildWait, CommandExec, ExecResult, WaitResult};
+use crate::traits::exec::{ChildWait, CommandExec, ExecResult};
 
 /// Handles raw command execution.
 fn handle_exec_command(
@@ -19,7 +19,6 @@ fn handle_exec_command(
 ) -> Result<()> {
     let node_config = get_config!(node);
 
-    let program = command.get_program().to_str().unwrap().to_owned();
     let timeout = match node_config.command_execute_timeout {
         0 => None,
         sec @ _ => Some(Duration::from_secs(sec)),
@@ -103,28 +102,25 @@ fn handle_exec_command(
                 t.join().unwrap()?; // wait for thread to complete
 
                 match result {
-                    Ok(WaitResult {
-                        timeout_kill,
-                        status,
-                    }) => match timeout_kill {
+                    Ok(result) => match result.timeout_kill {
                         true => sw_s.send(Response::ResultStream {
                             status: ResultStatus::Timeout,
                             line: String::from(""),
                         })?,
                         false => sw_s.send(Response::ResultStream {
-                            status: match status.success() {
+                            status: match result.status.success() {
                                 true => ResultStatus::Success,
                                 false => ResultStatus::Failure,
                             },
-                            line: String::from(""),
+                            line: format!("{result}"),
                         })?,
                     },
                     Err(e) => {
-                        stream_failure!(sw_s, format!("Failed to wait for '{program}': {e}"));
+                        stream_failure!(sw_s, format!("{e}"));
                     }
                 }
             }
-            Err(e) => stream_failure!(sw_s, format!("Failed to spawn '{program}': {e}")),
+            Err(e) => stream_failure!(sw_s, format!("{e}")),
         }
     }
     Ok(())
@@ -191,7 +187,7 @@ pub fn update_node_state(node_state_mutex: &NodeStateMutex) -> (bool, NodeUpdate
     /// Macro to fetch updates based on `node_config`.
     macro_rules! fetch_updates {
         ( $( $attr:ident ),* ) => { paste::paste! {
-            $(let $attr = if node_config.resources.iter().any(|s| map_resource(s) == "$attr") {
+            $(let $attr = if node_config.resources.iter().any(|s| map_resource(s) == stringify!($attr)) {
                 let result = crate::node::data::[<get_ $attr>]();
                 match result {
                     // repack the result to use NodeStateError

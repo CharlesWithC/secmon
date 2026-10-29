@@ -34,7 +34,7 @@ hostname = ""
 resources = ["who", "wg", "auth"]
 
 # time to wait when executing a command, before killing the child process
-command_execute_timeout = 0         # in seconds; use 0 to disable
+command_execute_timeout = 30        # in seconds; use 0 to disable
 
 # label-command pairs for whitelisted commands
 # label should not start with '-' which can conflict with command line options
@@ -42,8 +42,7 @@ command_execute_timeout = 0         # in seconds; use 0 to disable
 update = "apt update -y"
 reboot = "shutdown -r"
 
-
 # ============================================================
 [client]
 # time to wait when node is executing a command, before aborting execution
-node_wait_timeout = 0                # in seconds; use 0 to disable
+node_wait_timeout = 30               # in seconds; use 0 to disable

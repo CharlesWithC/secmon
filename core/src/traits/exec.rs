@@ -1,7 +1,8 @@
 use anyhow::{Result, anyhow};
+use std::fmt;
 use std::io::{PipeReader, Read};
 use std::os::unix::process::CommandExt;
-use std::process::{self, ExitStatus};
+use std::process::{self, ExitStatus, Stdio};
 use std::thread;
 use std::time::Duration;
 
@@ -11,9 +12,39 @@ pub struct ExecResult {
     pub output: String,
 }
 
+impl fmt::Display for ExecResult {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if self.status.success() {
+            write!(f, "success: {}", self.output)
+        } else if self.timeout_kill {
+            write!(f, "timeout")
+        } else if let Some(code) = self.status.code() {
+            write!(f, "failed with code {}\n{}", code, self.output)
+        } else {
+            // killed by signal
+            write!(f, "killed by {}\n{}", self.status, self.output)
+        }
+    }
+}
+
 pub struct WaitResult {
     pub timeout_kill: bool,
     pub status: ExitStatus,
+}
+
+impl fmt::Display for WaitResult {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if self.status.success() {
+            write!(f, "success")
+        } else if self.timeout_kill {
+            write!(f, "timeout")
+        } else if let Some(code) = self.status.code() {
+            write!(f, "failed with code {}", code)
+        } else {
+            // killed by signal
+            write!(f, "killed by {}", self.status)
+        }
+    }
 }
 
 pub trait CommandExec {
@@ -39,7 +70,6 @@ impl CommandExec for process::Command {
     ///
     /// More information here: https://doc.rust-lang.org/std/io/fn.pipe.html
     fn stream(self) -> Result<(process::Child, PipeReader), String> {
-        let program = self.get_program().to_str().unwrap().to_owned();
         let (reader, writer) =
             std::io::pipe().map_err(|e| format!("Failed to create pipe: {e}"))?;
         let cloned_writer = writer
@@ -47,13 +77,16 @@ impl CommandExec for process::Command {
             .map_err(|e| format!("Failed to clone pipe: {e}"))?;
 
         let mut command = self;
-        command.stdout(writer).stderr(cloned_writer);
+        command
+            .stdin(Stdio::null())
+            .stdout(writer)
+            .stderr(cloned_writer);
         let child = command
             // group processes so we can kill grandchildren
             // process group id would be same as the child pid
             .process_group(0)
             .spawn()
-            .map_err(|e| format!("Failed to spawn '{program}': {e}"))?;
+            .map_err(|e| format!("{e}"))?;
         drop(command);
 
         Ok((child, reader))
@@ -64,8 +97,6 @@ impl CommandExec for process::Command {
     /// Note: If child is timeout-killed, then result is an Ok. Error is only used when there is an error
     /// executing the command (rather than, the command does not compelte successfully).
     fn run(self, timeout: Option<Duration>) -> Result<ExecResult, String> {
-        let program = self.get_program().to_str().unwrap().to_owned();
-
         let (mut child, mut reader) = self.stream()?;
 
         let t = thread::spawn(move || -> Result<String, String> {
@@ -79,8 +110,7 @@ impl CommandExec for process::Command {
         let WaitResult {
             timeout_kill,
             status,
-        } = ChildWait::wait_timeout(&mut child, timeout)
-            .map_err(|e| format!("Failed to wait for '{program}': {e}"))?;
+        } = ChildWait::wait_timeout(&mut child, timeout).map_err(|e| format!("{e}"))?;
 
         let output = t.join().unwrap()?;
         Ok(ExecResult {

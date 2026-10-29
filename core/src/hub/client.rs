@@ -10,6 +10,7 @@ use crate::models::hub::{ClientCommand, ClientResponse, Node};
 use crate::models::node::NodeDataError;
 use crate::models::packet::{Command, Response, ResultStatus};
 use crate::traits::iosered::IOSerialized;
+use crate::{VERBOSE, vprintln};
 
 macro_rules! match_strict {
     ( $response:expr, $pattern:pat, $return:expr ) => {
@@ -52,7 +53,9 @@ fn print_node(node: &Node) -> () {
                 NodeDataError::Initializing => {
                     println!("\n{}: Initializing", $attr.yellow().bold())
                 }
-                NodeDataError::NotMonitored => {} // no verbose on not monitored attributes
+                NodeDataError::NotMonitored => {
+                    vprintln!("\n{}: NotMonitored", $attr.yellow().bold())
+                }
                 NodeDataError::Message(msg) => {
                     println!("\n{}: {msg}", $attr.yellow().bold())
                 }
@@ -161,9 +164,14 @@ fn exec_command(stream: &mut UnixStream, node: &Node, command: Command) -> Resul
                             println!("{}: {}", "Done".bold(), "Success".green().bold());
                         }
                         ResultStatus::Failure => {
+                            println!("{line}");
                             println!("{}: {}", "Done".bold(), "Failure".red().bold());
                         }
                     },
+                    Response::Result { status: _, output } => {
+                        println!("{output}");
+                        println!("{}: {}", "Done".bold(), "Generic Failure".red().bold());
+                    }
                     _ => {
                         // return immediately on invalid response
                         eprintln!("Invalid node response: {raw_resp}");
