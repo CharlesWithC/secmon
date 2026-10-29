@@ -9,11 +9,29 @@ bind_ip = "127.0.0.1"
 bind_port = 9992
 
 # time before a disconnected node is removed, if not replaced
-disconnect_grace_period = 300         # in seconds
+disconnect_grace_period = 300           # in seconds
 
 # replace a disconnected node if it reconnects with the same hostname
 # otherwise treat all new connections as new nodes
 assume_hostname_unique = true
+
+# noise protocol configuration for hub
+[hub.noise]
+enable = false                          # if false, then plaintext tcp is used
+
+private_key = ""                        # 32-bit private key
+public_key = ""                         # 32-bit public key
+
+preshared_key = ""                      # optional; 32-bit global preshared key
+
+# whether to whitelist nodes
+# if true, then node public keys must be set in hub.noise.node_whitelist
+# if false, then any node may connect to the hub
+use_whitelist = true
+
+# node hostname-publickey pairs
+[hub.noise.node_whitelist]
+hostname="public-key"
 
 # ============================================================
 [node]
@@ -34,7 +52,16 @@ hostname = ""
 resources = ["who", "wg", "auth"]
 
 # time to wait when executing a command, before killing the child process
-command_execute_timeout = 30        # in seconds; use 0 to disable
+command_execute_timeout = 30            # in seconds; use 0 to disable
+
+# noise protocol configuration for node
+[node.noise]
+enable = false
+
+private_key = ""                        # 32-bit private key
+public_key = ""                         # 32-bit public key
+
+preshared_key = ""                      # optional; 32-bit global preshared key
 
 # label-command pairs for whitelisted commands
 # label should not start with '-' which can conflict with command line options
@@ -45,4 +72,4 @@ reboot = "shutdown -r"
 # ============================================================
 [client]
 # time to wait when node is executing a command, before aborting execution
-node_wait_timeout = 30               # in seconds; use 0 to disable
+node_wait_timeout = 30                  # in seconds; use 0 to disable

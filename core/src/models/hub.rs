@@ -60,7 +60,7 @@ impl fmt::Display for Node {
         let last_update_dt: DateTime<Utc> = self.last_state_update.into();
         write!(
             f,
-            "Node(serial={}, hostname=\"{}\", address=\"{}\", sessions[{}], wg_peers[{}], last_update=\"{}\")",
+            "Node(serial={}, hostname={:?}, address={:?}, sessions[{}], wg_peers[{}], last_update={:?})",
             self.serial,
             self.hostname,
             self.address,

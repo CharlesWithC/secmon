@@ -1,5 +1,7 @@
 use anyhow::{Result, anyhow, bail};
 use gethostname::gethostname;
+use getrandom;
+use snow::Builder;
 use std::fs;
 use std::path::Path;
 use std::{env, process};
@@ -10,7 +12,7 @@ mod models;
 mod node;
 mod traits;
 mod utils;
-use crate::config::{CONFIG, Config, VERBOSE};
+use crate::config::{CONFIG, Config, KEYLENGTH, Key, NOISE_PATTERN, VERBOSE};
 use crate::utils::{get_env_var, get_socket_path};
 
 const USAGE: &str = "Usage:
@@ -19,6 +21,7 @@ const USAGE: &str = "Usage:
   secmon help                       show this help message
 
 Utility commands:
+  secmon genkey <pair|psk>          generate keypair or preshared key
   secmon subscribe                  subscribe to node state atomic updates
   secmon <list|->                   list all recently connected nodes
   secmon <node>                     show info about a recently connected node
@@ -33,6 +36,46 @@ Options:
                                     /etc/secmon/config.toml in order by default
   -v, --verbose                     verbose mode
 ";
+
+/// Handles simple commands that do not require loading config.
+///
+/// Returns `Ok(true)` if command is handled, which allows `main` to exit early.
+fn handle_simple_command(args: &Vec<String>) -> Result<bool> {
+    match args.get(1).unwrap().as_str() {
+        "genkey" => {
+            match args
+                .get(2)
+                .ok_or(anyhow!(
+                    "Specify the type of key to generate: 'pair' or 'psk'."
+                ))?
+                .as_str()
+            {
+                "pair" => {
+                    let keypair = Builder::new(NOISE_PATTERN.parse().unwrap())
+                        .generate_keypair()
+                        .unwrap();
+                    println!("Private: {}", Key::from(keypair.private));
+                    println!("Public: {}", Key::from(keypair.public));
+                    Ok(true)
+                }
+                "psk" => {
+                    let mut buf = [0u8; KEYLENGTH];
+                    getrandom::fill(&mut buf).expect("Failed to fill random buffer");
+                    println!("Preshared: {}", Key::from(buf));
+                    Ok(true)
+                }
+                kt @ _ => {
+                    bail!("{kt:?} is not a valid type of key. Choose from 'pair' or 'psk'.");
+                }
+            }
+        }
+        "help" => {
+            println!("{USAGE}");
+            Ok(true)
+        }
+        _ => Ok(false), // to be handled by `launch`
+    }
+}
 
 /// Locates and loads configuration file.
 ///
@@ -91,7 +134,7 @@ fn load_config(args: &Vec<String>) -> Result<()> {
 
     let mut parsed_config: Config =
         toml::from_str(&config_raw).map_err(|e| anyhow!("Unable to parse config file: {e}"))?;
-    if parsed_config.node.hostname == "" {
+    if parsed_config.node.hostname.is_empty() {
         parsed_config.node.hostname = gethostname().to_string_lossy().into_owned();
     }
 
@@ -156,15 +199,33 @@ fn launch(args: &Vec<String>) -> Result<()> {
 fn main() {
     let args: Vec<String> = env::args().collect();
 
-    if args.len() < 2 || args.get(1).unwrap() == "help" {
+    if args.len() < 2 {
         println!("{USAGE}");
-        return;
+        process::exit(1);
+    }
+
+    match handle_simple_command(&args) {
+        Ok(true) => {
+            process::exit(0);
+        }
+        Err(e) => {
+            eprintln!("{e}");
+            process::exit(1);
+        }
+        _ => {} // not a simple command! keep going!
     }
 
     load_config(&args).unwrap_or_else(|e| {
         eprintln!("{e}");
         process::exit(1);
     });
+
+    // TODO: REMOVE BELOW AFTER IMPLEMENTING NOISE PROTOCOL
+    use crate::config::get_config;
+    if get_config!(hub).noise.enable || get_config!(node).noise.enable {
+        panic!("noise protocol is not implemented yet");
+    }
+    // TODO: REMOVE ABOVE AFTER IMPLEMENTING NOISE PROTOCOL
 
     if let Err(e) = launch(&args) {
         eprintln!("{e}");

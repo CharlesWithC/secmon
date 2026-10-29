@@ -103,7 +103,7 @@ impl fmt::Display for Session {
 
         write!(
             f,
-            "Session(user=\"{}\", from=\"{}\", login=\"{}\")",
+            "Session(user={:?}, from={:?}, login={:?})",
             self.user,
             self.from.as_deref().unwrap_or("N/A"),
             login_parsed
@@ -136,7 +136,7 @@ impl fmt::Display for WgPeer {
 
         write!(
             f,
-            "WgPeer(interface=\"{}\", peer=\"{}\", endpoint=\"{}\", latest_handshake=\"{}\")",
+            "WgPeer(interface={:?}, peer={:?}, endpoint={:?}, latest_handshake={:?})",
             self.interface,
             self.peer,
             self.endpoint.as_deref().unwrap_or("N/A"),
@@ -167,7 +167,7 @@ impl fmt::Display for AuthLog {
 
         write!(
             f,
-            "AuthLog(time=\"{}\", process=\"{}\", user=\"{}\", detail={})",
+            "AuthLog(time={:?}, process={:?}, user={:?}, detail={})",
             time_parsed, self.process, self.user, self.detail
         )
     }
@@ -219,23 +219,23 @@ impl fmt::Display for AuthLogDetail {
         match self {
             Self::SshConnect { host, port, method } => write!(
                 f,
-                "SshConnect(host=\"{}\", port={}, method=\"{}\")",
+                "SshConnect(host={:?}, port={}, method={:?})",
                 host, port, method
             ),
             Self::SshFailPassword { host, port } => {
-                write!(f, "SshFailPassword(host=\"{}\", port={})", host, port)
+                write!(f, "SshFailPassword(host={:?}, port={})", host, port)
             }
             Self::SshDisconnect { host, port } => {
-                write!(f, "SshDisconnect(host=\"{}\", port={})", host, port)
+                write!(f, "SshDisconnect(host={:?}, port={})", host, port)
             }
             Self::SuOpen { target_user } => {
-                write!(f, "SuOpen(target_user=\"{}\")", target_user)
+                write!(f, "SuOpen(target_user={:?})", target_user)
             }
             Self::SuFail { target_user } => {
-                write!(f, "SuFail(target_user=\"{}\")", target_user)
+                write!(f, "SuFail(target_user={:?})", target_user)
             }
             Self::SuClose { target_user } => {
-                write!(f, "SuClose(target_user=\"{}\")", target_user)
+                write!(f, "SuClose(target_user={:?})", target_user)
             }
         }
     }
