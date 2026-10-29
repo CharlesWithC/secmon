@@ -6,11 +6,11 @@ This package contains definitions of all models, traits and methods, which are p
 
 ## Basic Usage
 
+Modify and copy [`config.toml`](./src/config.toml) to `~/.config/secmon/config.toml` or `/etc/secmon/config.toml`, or use `-c /path/to/config.toml` at launch time.
+
 Start `hub` daemon with `secmon hub`.
 
-Start `node` daemon with `secmon node [who] [wg] [auth] [--reconnect]`.
-
-- `[who]` `[wg]` `[auth]` selects the resources to monitor.
+Start `node` daemon with `secmon node`.
 
 The following commands can be used on the `hub` server:
 
