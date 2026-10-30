@@ -11,7 +11,7 @@ mod crypto;
 mod hub;
 mod node;
 use crate::config::{CONFIG, Config, VERBOSE};
-use crate::crypto::{KEYLENGTH, Key, NOISE_PATTERN};
+use crate::crypto::{NOISE_KEYLEN, Key, NOISE_PATTERN};
 use secmon::utils::{get_env_var, get_socket_path};
 
 const USAGE: &str = "Usage:
@@ -58,7 +58,7 @@ fn handle_simple_command(args: &Vec<String>) -> Result<bool> {
                     Ok(true)
                 }
                 "psk" => {
-                    let mut buf = [0u8; KEYLENGTH];
+                    let mut buf = [0u8; NOISE_KEYLEN];
                     getrandom::fill(&mut buf).expect("Failed to fill random buffer");
                     println!("Preshared: {}", Key::from(buf));
                     Ok(true)
@@ -233,13 +233,6 @@ fn main() {
         eprintln!("{e}");
         process::exit(1);
     });
-
-    // TODO: REMOVE BELOW AFTER IMPLEMENTING NOISE PROTOCOL
-    use crate::config::get_config;
-    if get_config!(hub).noise.enable || get_config!(node).noise.enable {
-        panic!("noise protocol is not implemented yet");
-    }
-    // TODO: REMOVE ABOVE AFTER IMPLEMENTING NOISE PROTOCOL
 
     let args = sanitize_args(&args);
     if let Err(e) = launch(&args) {

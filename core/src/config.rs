@@ -1,5 +1,5 @@
 use gethostname::gethostname;
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 use std::collections::BTreeMap;
 use std::net::{IpAddr, Ipv4Addr};
 use std::sync::OnceLock;
@@ -110,7 +110,10 @@ pub struct HubNoise {
     pub use_whitelist: bool,
 
     /// Hostname-publickey dictionary of whitelisted nodes.
-    pub node_whitelist: BTreeMap<String, Key>,
+    ///
+    /// Note: We store {key: hostname} in memory to facilitate efficient lookup on new connections.
+    #[serde(deserialize_with = "inverted_btree")]
+    pub node_whitelist: BTreeMap<Key, String>,
 }
 
 impl Default for HubNoise {
@@ -225,4 +228,17 @@ impl Default for ClientConfig {
             node_wait_timeout: 0,
         }
     }
+}
+
+/// Helper function to deserialize {k: v} btree as {v: k}.
+fn inverted_btree<'de, D, K, V>(d: D) -> Result<BTreeMap<K, V>, D::Error>
+where
+    D: Deserializer<'de>,
+    K: Deserialize<'de> + Ord,
+    V: Deserialize<'de> + Ord,
+{
+    Ok(BTreeMap::<V, K>::deserialize(d)?
+        .into_iter()
+        .map(|(v, k)| (k, v))
+        .collect())
 }

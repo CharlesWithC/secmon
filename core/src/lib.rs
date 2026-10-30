@@ -6,5 +6,6 @@ pub mod models {
 pub mod traits {
     pub mod exec;
     pub mod iosered;
+    pub mod tryclone;
 }
 pub mod utils;

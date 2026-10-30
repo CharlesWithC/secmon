@@ -8,7 +8,7 @@ use std::time::{Duration, SystemTime};
 mod data;
 mod handler;
 use crate::config::{CONFIG, NodeConfig, get_config};
-use crate::crypto::NOISE_PATTERN;
+use crate::crypto::{NOISE_MAXLEN, NOISE_PATTERN, NoiseShared, NoisyStream};
 use secmon::models::node::{NodeDataError, NodeState};
 use secmon::models::packet::{Command, Response};
 use secmon::traits::iosered::IOSerialized;
@@ -21,6 +21,7 @@ pub fn main() -> Result<()> {
     // otherwise, retry silently, if applicable
     // note: initialize to true to print first error
     let mut last_connect_successful = true;
+    let mut reconnect_wait = 100;
     loop {
         let node_config = get_config!(node);
         let NodeConfig {
@@ -30,10 +31,14 @@ pub fn main() -> Result<()> {
         } = node_config;
 
         let result = thread::scope(|s| {
-            let mut stream = TcpStream::connect((*ip, *port))?;
-            println!("Connected to hub {ip}:{port}");
+            let stream = TcpStream::connect((*ip, *port))?;
 
-            last_connect_successful = true;
+            // wrap stream
+            // note: encryption is disabled during handshake as `noise=None`
+            let mut stream = NoisyStream {
+                stream,
+                noise: None,
+            };
 
             // noise protocol handeshake
             let noise_config = &get_config!(node).noise;
@@ -43,8 +48,8 @@ pub fn main() -> Result<()> {
                     .remote_public_key(&noise_config.hub_public_key.as_ref())?
                     .psk(0, &noise_config.preshared_key.into())?
                     .build_initiator()?;
-                let mut ct = [0u8; 65535];
-                let mut pt = [0u8; 65535];
+                let mut ct = [0u8; NOISE_MAXLEN]; // buffer for encrypted handshake data
+                let mut pt = [0u8; NOISE_MAXLEN]; // empty buffer to make noise happy
 
                 // -> e, es
                 let n = noise.write_message(&[], &mut ct)?;
@@ -62,9 +67,16 @@ pub fn main() -> Result<()> {
                     ));
                 }
 
-                // TODO: noise in transport
-                // noise.into_transport_mode()?;
+                stream.noise = Some(Arc::new(NoiseShared {
+                    state: noise.into_stateless_transport_mode()?,
+                    tx: Mutex::new(0),
+                    rx: Mutex::new(0),
+                }));
             }
+
+            println!("Connected to hub {ip}:{port}");
+            last_connect_successful = true;
+            reconnect_wait = 100;
 
             // respond hostname on new connection
             stream.write(&Response::Connect {
@@ -212,10 +224,10 @@ pub fn main() -> Result<()> {
             return Ok(());
         } // otherwise, reconnect
 
-        if last_connect_successful {
-            println!("Reconnecting...");
-        }
-        thread::sleep(Duration::from_millis(100));
+        reconnect_wait += reconnect_wait; // exponential back-off
+        reconnect_wait = std::cmp::min(reconnect_wait, 128000); // max wait
+        println!("Reconnecting after {reconnect_wait}ms...");
+        thread::sleep(Duration::from_millis(reconnect_wait));
         last_connect_successful = false;
     }
 }

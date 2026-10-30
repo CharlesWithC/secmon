@@ -21,10 +21,16 @@ The following commands can be used on the `hub` server:
 
 See `secmon help` for detailed information on using the program.
 
+## Crypto
+
+Noise protocol with `Noise_XKpsk0_25519_ChaChaPoly_BLAKE2s` pattern is supported for connections over insecure networks.
+
+To filter unwanted/malicious nodes, either preshared key or node whitelist (or both) shall be configured. Preshared key encrypts all communications from the first message, and so unauthorized nodes cannot complete a handshake at all. On the other hand, node whitelist checks node's public key after handshake, and drops connection if the key is not whitelisted.
+
+Details about the implementation can be found in [`crypto.rs`](./src/crypto.rs).
+
 ## Notes
 
 `hub` does not monitor its own resources, and so a separate `node` should be launched on the same server as `hub`.
 
 Nodes check `who` and `wg` every second, and watch for changes on `auth` with `journalctl -f`, and update `hub` atomically once something changes.
-
-All communication occurs in unencrypted tcp streams, as a trusted network is assumed. A secure tunnel should be used for communication over the Internet.

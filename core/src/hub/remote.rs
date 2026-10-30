@@ -1,12 +1,12 @@
 use anyhow::{Result, anyhow};
 use crossbeam_channel::{Receiver, unbounded};
 use std::net::{SocketAddr, TcpListener, TcpStream};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::config::{CONFIG, get_config};
-use crate::crypto::NOISE_PATTERN;
+use crate::crypto::{Key, NOISE_MAXLEN, NOISE_PATTERN, NoiseShared, NoisyStream};
 use secmon::models::hub::{ChannelPacket, HubStateMutex, Node};
 use secmon::models::node::{NodeDataError, NodeUpdate};
 use secmon::models::packet::Response;
@@ -139,11 +139,19 @@ fn handle_stream_close(serial: u32, hub_state: &HubStateMutex) -> () {
 /// Main thread function for a single remote node connection.
 ///
 /// This is a blocking function and does not exit unless interrupted.
-fn thread_main(mut stream: TcpStream, hub_state: &HubStateMutex) -> Result<()> {
+fn thread_main(stream: TcpStream, hub_state: &HubStateMutex) -> Result<()> {
     let serial;
     let cmd_receiver;
     let address = stream.peer_addr().unwrap();
     let hostname;
+
+    // wrap stream
+    // note: encryption is disabled during handshake as `noise=None`
+    let mut stream = NoisyStream {
+        stream,
+        noise: None,
+    };
+    let mut wanted_hostname: Option<String> = None; // for `use_whitelist`
 
     // noise protocol handshake
     let noise_config = &get_config!(hub).noise;
@@ -151,9 +159,9 @@ fn thread_main(mut stream: TcpStream, hub_state: &HubStateMutex) -> Result<()> {
         let mut noise = snow::Builder::new(NOISE_PATTERN.parse()?)
             .local_private_key(&noise_config.private_key.as_ref())?
             .psk(0, &noise_config.preshared_key.into())?
-            .build_initiator()?;
-        let mut ct = [0u8; 65535];
-        let mut pt = [0u8; 65535];
+            .build_responder()?;
+        let mut ct = [0u8; NOISE_MAXLEN]; // buffer for encrypted handshake data
+        let mut pt = [0u8; NOISE_MAXLEN]; // empty buffer to make noise happy
 
         // <- e, es
         let buf = stream.read::<Vec<u8>>()?;
@@ -171,8 +179,27 @@ fn thread_main(mut stream: TcpStream, hub_state: &HubStateMutex) -> Result<()> {
             ));
         }
 
-        // TODO: noise in transport
-        // noise.into_transport_mode()?;
+        if noise_config.use_whitelist {
+            let node_pubkey = Key::from(
+                noise
+                    .get_remote_static()
+                    .ok_or(anyhow::anyhow!("Failed to extract node public key"))?
+                    .to_vec(),
+            );
+            wanted_hostname = Some(
+                noise_config
+                    .node_whitelist
+                    .get(&node_pubkey)
+                    .ok_or(anyhow::anyhow!("Node public key is not whitelisted"))?
+                    .clone(),
+            );
+        }
+
+        stream.noise = Some(Arc::new(NoiseShared {
+            state: noise.into_stateless_transport_mode()?,
+            tx: Mutex::new(0),
+            rx: Mutex::new(0),
+        }));
     }
 
     // receive hostname on connect
@@ -182,6 +209,15 @@ fn thread_main(mut stream: TcpStream, hub_state: &HubStateMutex) -> Result<()> {
     {
         hostname = node_hostname;
         (serial, cmd_receiver) = handle_new_node(&address, &hostname, hub_state);
+
+        if let Some(wanted) = wanted_hostname
+            && wanted != hostname
+        {
+            return Err(anyhow::anyhow!(
+                "{address} claims to be {hostname}, but is whitelisted as {wanted}"
+            ));
+        }
+
         println!("{address} ({hostname}) connected and was assigned serial {serial}");
     } else {
         return Err(anyhow::anyhow!(
@@ -201,7 +237,7 @@ fn thread_main(mut stream: TcpStream, hub_state: &HubStateMutex) -> Result<()> {
             // note: `terminate` is not needed (and cannot be used, since we have a blocking `recv`)
             //       we drop the `cmd_sender` when connection closes, which makes `cmd_receiver` error,
             //       and then the thread would terminate for free
-            let mut sw: TcpStream = stream
+            let mut sw = stream
                 .try_clone()
                 .map_err(|e| anyhow!("Unable to clone stream: {e}"))?;
 

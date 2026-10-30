@@ -17,6 +17,9 @@ pub trait IOSerialized {
 impl<S: Read + Write> IOSerialized for S {
     fn write<T: Serialize>(&mut self, data: &T) -> Result<()> {
         let encoded = postcard::to_stdvec(data).expect("data should be serializable");
+        if u32::try_from(encoded.len()).is_err() {
+            panic!("serialized data should be smaller than {} bytes", u32::MAX);
+        }
         self.write_all(&(encoded.len() as u32).to_be_bytes())?;
         self.write_all(&encoded)
     }
@@ -29,7 +32,8 @@ impl<S: Read + Write> IOSerialized for S {
         let mut data = vec![0u8; len];
         self.read_exact(&mut data)?;
 
-        let decoded = postcard::from_bytes(&data).expect("data should be deserializable");
+        let decoded = postcard::from_bytes(&data)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
         Ok(decoded)
     }
 }
