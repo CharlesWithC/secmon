@@ -9,9 +9,9 @@ mod data;
 mod handler;
 use crate::config::{CONFIG, NodeConfig, get_config};
 use crate::crypto::NOISE_PATTERN;
-use crate::models::node::{NodeDataError, NodeState};
-use crate::models::packet::{Command, Response};
-use crate::traits::iosered::IOSerialized;
+use secmon::models::node::{NodeDataError, NodeState};
+use secmon::models::packet::{Command, Response};
+use secmon::traits::iosered::IOSerialized;
 
 /// Node-side main function to communicate with hub.
 ///

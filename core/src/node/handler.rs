@@ -7,9 +7,9 @@ use std::thread;
 use std::time::Duration;
 
 use crate::config::{CONFIG, get_config};
-use crate::models::node::{NodeDataError, NodeStateMutex, NodeUpdate};
-use crate::models::packet::{Command, Response, ResultStatus};
-use crate::traits::exec::{ChildWait, CommandExec, ExecResult};
+use secmon::models::node::{NodeDataError, NodeStateMutex, NodeUpdate};
+use secmon::models::packet::{Command, Response, ResultStatus};
+use secmon::traits::exec::{ChildWait, CommandExec, ExecResult};
 
 /// Handles raw command execution.
 fn handle_exec_command(

@@ -9,13 +9,10 @@ use std::{env, process};
 mod config;
 mod crypto;
 mod hub;
-mod models;
 mod node;
-mod traits;
-mod utils;
 use crate::config::{CONFIG, Config, VERBOSE};
 use crate::crypto::{KEYLENGTH, Key, NOISE_PATTERN};
-use crate::utils::{get_env_var, get_socket_path};
+use secmon::utils::{get_env_var, get_socket_path};
 
 const USAGE: &str = "Usage:
   secmon hub                        launch hub daemon

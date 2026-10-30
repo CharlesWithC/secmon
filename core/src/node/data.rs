@@ -3,8 +3,8 @@ use chrono::{DateTime, Local, NaiveDateTime};
 use std::process::Command;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use crate::models::node::{AuthLog, AuthLogDetail, Session, WgPeer};
-use crate::traits::exec::CommandExec;
+use secmon::models::node::{AuthLog, AuthLogDetail, Session, WgPeer};
+use secmon::traits::exec::CommandExec;
 
 /// Executes `who -w` and returns parsed result.
 ///

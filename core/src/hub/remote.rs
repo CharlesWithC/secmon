@@ -7,10 +7,10 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::config::{CONFIG, get_config};
 use crate::crypto::NOISE_PATTERN;
-use crate::models::hub::{ChannelPacket, HubStateMutex, Node};
-use crate::models::node::{NodeDataError, NodeUpdate};
-use crate::models::packet::Response;
-use crate::traits::iosered::IOSerialized;
+use secmon::models::hub::{ChannelPacket, HubStateMutex, Node};
+use secmon::models::node::{NodeDataError, NodeUpdate};
+use secmon::models::packet::Response;
+use secmon::traits::iosered::IOSerialized;
 
 /// Initializes node connection.
 ///
@@ -221,7 +221,7 @@ fn thread_main(mut stream: TcpStream, hub_state: &HubStateMutex) -> Result<()> {
                         // `sr_r.recv()` should not fail since `sr_s` is managed in this func
                         let resp = sr_r.recv()?;
                         // we check if response is a streaming response
-                        let is_streaming = crate::utils::is_streaming_response(&resp);
+                        let is_streaming = secmon::utils::is_streaming_response(&resp);
                         // ignore error; we must always send all response back (especially with streaming)
                         // otherwise, if `resp_sender` fails, then response sequencing would corrupt
                         let _ = resp_sender.send(resp);

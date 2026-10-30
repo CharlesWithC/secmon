@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 use crate::config::{CONFIG, HubConfig, get_config};
-use crate::models::hub::{HubNodes, HubStateMutex, SubscribedClients};
+use secmon::models::hub::{HubNodes, HubStateMutex, SubscribedClients};
 
 mod client;
 mod local;

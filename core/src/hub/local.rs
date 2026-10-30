@@ -5,10 +5,10 @@ use std::sync::Arc;
 use std::thread;
 use std::time::SystemTime;
 
-use crate::models::hub::{ClientCommand, ClientResponse, HubStateMutex};
-use crate::models::node::NodeUpdate;
-use crate::models::packet::{Command, Response};
-use crate::traits::iosered::IOSerialized;
+use secmon::models::hub::{ClientCommand, ClientResponse, HubStateMutex};
+use secmon::models::node::NodeUpdate;
+use secmon::models::packet::{Command, Response};
+use secmon::traits::iosered::IOSerialized;
 
 /// Returns the result of finding a node based on a string-based query.
 fn find_node(query: String, hub_state: &HubStateMutex) -> ClientResponse {
@@ -48,13 +48,12 @@ fn handle_raw_command(
         }
         drop(guard);
 
-
         // note: `resp_r.recv()` can fail when hub/remote ignore the command and `continue`
         //       which drops `resp_s` and closes the channel
 
         loop {
             let response = resp_r.recv()?;
-            let is_streaming = crate::utils::is_streaming_response(&response);
+            let is_streaming = secmon::utils::is_streaming_response(&response);
             stream.write(&ClientResponse::RawResponse(response))?;
             if !is_streaming {
                 break;

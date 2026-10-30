@@ -6,11 +6,11 @@ use std::os::unix::net::UnixStream;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::config::{CONFIG, get_config};
-use crate::models::hub::{ClientCommand, ClientResponse, Node};
-use crate::models::node::NodeDataError;
-use crate::models::packet::{Command, Response, ResultStatus};
-use crate::traits::iosered::IOSerialized;
 use crate::{VERBOSE, vprintln};
+use secmon::models::hub::{ClientCommand, ClientResponse, Node};
+use secmon::models::node::NodeDataError;
+use secmon::models::packet::{Command, Response, ResultStatus};
+use secmon::traits::iosered::IOSerialized;
 
 macro_rules! match_strict {
     ( $response:expr, $pattern:pat, $return:expr ) => {
@@ -151,7 +151,7 @@ fn exec_command(stream: &mut UnixStream, node: &Node, command: Command) -> Resul
 
                 let raw_resp = match_strict!(resp, ClientResponse::RawResponse(raw_resp), raw_resp);
                 // use centralized streaming response detection to ensure consistency
-                let is_streaming = crate::utils::is_streaming_response(&raw_resp);
+                let is_streaming = secmon::utils::is_streaming_response(&raw_resp);
                 match raw_resp {
                     Response::ResultStream { status, line } => match status {
                         ResultStatus::Pending => {
