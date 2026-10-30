@@ -37,9 +37,9 @@ Options:
   -v, --verbose                     verbose mode
 ";
 
-/// Handles simple commands that do not require loading config.
+/// Handles simple commands that do not involve options.
 ///
-/// Returns `Ok(true)` if command is handled, which allows `main` to exit early.
+/// Returns `Ok(true)` if command is handled, `Ok(false)` if command is not handled, and `Err` is an error occurred.
 fn handle_simple_command(args: &Vec<String>) -> Result<bool> {
     match args.get(1).unwrap().as_str() {
         "genkey" => {
@@ -77,34 +77,13 @@ fn handle_simple_command(args: &Vec<String>) -> Result<bool> {
     }
 }
 
-/// Locates and loads configuration file.
+/// Parses and loads configuration given an optional path.
 ///
-/// Note: This also handles -v / --verbose command line argument.
-fn load_config(args: &Vec<String>) -> Result<()> {
-    let mut config_path: Option<String> = None;
+/// If `path` is `None`, then try default locations, i.e.
+/// `$XDG_CONFIG_HOME/secmon/config.toml` and `/etc/secmon/config.toml`.
+fn load_config(path: Option<String>) -> Result<()> {
+    let mut config_path = path;
 
-    // try -c/--config argument
-    let mut it = args.iter();
-    while let Some(arg) = it.next() {
-        if arg == "-c" || arg == "--config" {
-            if !config_path.is_none() {
-                bail!("Duplicate '-c' argument detected. Provide only one config file.");
-            }
-
-            let Some(path) = it.next() else {
-                bail!("Invalid '-c' argument. Provide a config file.");
-            };
-            if !Path::new(path).exists() {
-                bail!("Config file does not exist: {path}");
-            }
-            config_path = Some(path.clone());
-        }
-        if arg == "-v" || arg == "--verbose" {
-            VERBOSE.set(true).ok();
-        }
-    }
-
-    // try $XDG_CONFIG_HOME/secmon/config.toml and /etc/secmon/config.toml
     if config_path.is_none() {
         let mut try_paths: Vec<String> = vec![];
 
@@ -145,6 +124,57 @@ fn load_config(args: &Vec<String>) -> Result<()> {
         .map_err(|_| panic!("Error when initializing config"))
 }
 
+/// Parses and handles options in args, specifically,
+/// - loads configuration file
+/// - detects verbose mode
+fn handle_args_options(args: &Vec<String>) -> Result<()> {
+    let mut config_path: Option<String> = None;
+
+    let mut it = args.iter();
+    while let Some(arg) = it.next() {
+        if arg == "-c" || arg == "--config" {
+            if !config_path.is_none() {
+                bail!("Duplicate '-c' argument detected. Provide only one config file.");
+            }
+
+            let Some(path) = it.next() else {
+                bail!("Invalid '-c' argument. Provide a config file.");
+            };
+            if !Path::new(path).exists() {
+                bail!("Config file does not exist: {path}");
+            }
+            config_path = Some(path.clone());
+        }
+        if arg == "-v" || arg == "--verbose" {
+            VERBOSE.set(true).ok();
+        }
+    }
+
+    load_config(config_path)?;
+
+    Ok(())
+}
+
+/// Return args with options removed.
+fn sanitize_args(args: &Vec<String>) -> Vec<String> {
+    let mut args = args.clone();
+    let mut skip_next = false;
+    args.retain(|a| {
+        if std::mem::take(&mut skip_next) {
+            return false; // value belonging to -c/--config
+        }
+        match a.as_str() {
+            "-v" | "--verbose" => false,
+            "-c" | "--config" => {
+                skip_next = true;
+                false
+            }
+            _ => true,
+        }
+    });
+    return args;
+}
+
 /// Wrapped "real" main to return errors if any.
 fn launch(args: &Vec<String>) -> Result<()> {
     match args.get(1).unwrap().as_str() {
@@ -163,21 +193,6 @@ fn launch(args: &Vec<String>) -> Result<()> {
             crate::node::main()?;
         }
         _ => {
-            let mut args = args.clone();
-            let mut skip_next = false;
-            args.retain(|a| {
-                if std::mem::take(&mut skip_next) {
-                    return false; // value belonging to -c/--config
-                }
-                match a.as_str() {
-                    "-v" | "--verbose" => false,
-                    "-c" | "--config" => {
-                        skip_next = true;
-                        false
-                    }
-                    _ => true,
-                }
-            });
             let command = args[1..].join(" ");
 
             let socket_path = get_socket_path();
@@ -215,7 +230,7 @@ fn main() {
         _ => {} // not a simple command! keep going!
     }
 
-    load_config(&args).unwrap_or_else(|e| {
+    handle_args_options(&args).unwrap_or_else(|e| {
         eprintln!("{e}");
         process::exit(1);
     });
@@ -227,6 +242,7 @@ fn main() {
     }
     // TODO: REMOVE ABOVE AFTER IMPLEMENTING NOISE PROTOCOL
 
+    let args = sanitize_args(&args);
     if let Err(e) = launch(&args) {
         eprintln!("{e}");
         process::exit(1);
