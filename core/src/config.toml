@@ -19,9 +19,7 @@ assume_hostname_unique = true
 [hub.noise]
 enable = false                          # if false, then plaintext tcp is used
 
-private_key = ""                        # 32-bit private key
-public_key = ""                         # 32-bit public key
-
+private_key = ""                        # 32-bit private key for hub
 preshared_key = ""                      # optional; 32-bit global preshared key
 
 # whether to whitelist nodes
@@ -58,8 +56,8 @@ command_execute_timeout = 30            # in seconds; use 0 to disable
 [node.noise]
 enable = false
 
-private_key = ""                        # 32-bit private key
-public_key = ""                         # 32-bit public key
+private_key = ""                        # 32-bit private key for node
+hub_public_key = ""                     # 32-bit public key from hub
 
 preshared_key = ""                      # optional; 32-bit global preshared key
 

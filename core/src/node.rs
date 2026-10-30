@@ -8,6 +8,7 @@ use std::time::{Duration, SystemTime};
 mod data;
 mod handler;
 use crate::config::{CONFIG, NodeConfig, get_config};
+use crate::crypto::NOISE_PATTERN;
 use crate::models::node::{NodeDataError, NodeState};
 use crate::models::packet::{Command, Response};
 use crate::traits::iosered::IOSerialized;
@@ -34,9 +35,40 @@ pub fn main() -> Result<()> {
 
             last_connect_successful = true;
 
+            // noise protocol handeshake
+            let noise_config = &get_config!(node).noise;
+            if noise_config.enable {
+                let mut noise = snow::Builder::new(NOISE_PATTERN.parse()?)
+                    .local_private_key(&noise_config.private_key.as_ref())?
+                    .remote_public_key(&noise_config.hub_public_key.as_ref())?
+                    .psk(0, &noise_config.preshared_key.into())?
+                    .build_initiator()?;
+                let mut ct = [0u8; 65535];
+                let mut pt = [0u8; 65535];
+
+                // -> e, es
+                let n = noise.write_message(&[], &mut ct)?;
+                stream.write(&ct[..n].to_vec())?;
+                // <- e, ee
+                let buf = stream.read::<Vec<u8>>()?;
+                noise.read_message(buf.as_slice(), &mut pt)?;
+                // -> s, ee
+                let n = noise.write_message(&[], &mut ct)?;
+                stream.write(&ct[..n].to_vec())?;
+
+                if !noise.is_handshake_finished() {
+                    return Err(anyhow::anyhow!(
+                        "Failed to complete noise protocol handshake"
+                    ));
+                }
+
+                // TODO: noise in transport
+                // noise.into_transport_mode()?;
+            }
+
             // respond hostname on new connection
             stream.write(&Response::Connect {
-                hostname: node_config.hostname.clone()
+                hostname: node_config.hostname.clone(),
             })?;
 
             // sender & receiver for stream writer (`sw`)
@@ -127,8 +159,7 @@ pub fn main() -> Result<()> {
                             return;
                         }
 
-                        let success =
-                            handler::handle_journalctl(&sw_s, &child_opt_mutex);
+                        let success = handler::handle_journalctl(&sw_s, &child_opt_mutex);
                         if !success {
                             // error is relayed to hub; do not retry on error
                             return;

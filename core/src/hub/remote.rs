@@ -6,6 +6,7 @@ use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::config::{CONFIG, get_config};
+use crate::crypto::NOISE_PATTERN;
 use crate::models::hub::{ChannelPacket, HubStateMutex, Node};
 use crate::models::node::{NodeDataError, NodeUpdate};
 use crate::models::packet::Response;
@@ -144,6 +145,37 @@ fn thread_main(mut stream: TcpStream, hub_state: &HubStateMutex) -> Result<()> {
     let address = stream.peer_addr().unwrap();
     let hostname;
 
+    // noise protocol handshake
+    let noise_config = &get_config!(hub).noise;
+    if noise_config.enable {
+        let mut noise = snow::Builder::new(NOISE_PATTERN.parse()?)
+            .local_private_key(&noise_config.private_key.as_ref())?
+            .psk(0, &noise_config.preshared_key.into())?
+            .build_initiator()?;
+        let mut ct = [0u8; 65535];
+        let mut pt = [0u8; 65535];
+
+        // <- e, es
+        let buf = stream.read::<Vec<u8>>()?;
+        noise.read_message(buf.as_slice(), &mut pt)?;
+        // -> e, ee
+        let n = noise.write_message(&[], &mut ct)?;
+        stream.write(&ct[..n].to_vec())?;
+        // <- s, se
+        let buf = stream.read::<Vec<u8>>()?;
+        noise.read_message(buf.as_slice(), &mut pt)?;
+
+        if !noise.is_handshake_finished() {
+            return Err(anyhow::anyhow!(
+                "Failed to complete noise protocol handshake"
+            ));
+        }
+
+        // TODO: noise in transport
+        // noise.into_transport_mode()?;
+    }
+
+    // receive hostname on connect
     if let Response::Connect {
         hostname: node_hostname,
     } = stream.read::<Response>()?
