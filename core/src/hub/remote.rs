@@ -7,10 +7,20 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::config::{CONFIG, get_config};
 use crate::crypto::{Key, NOISE_MAXLEN, NOISE_PATTERN, NoiseShared, NoisyStream};
-use secmon::models::hub::{ChannelPacket, HubStateMutex, Node};
-use secmon::models::node::{NodeDataError, NodeUpdate};
+use secmon::models::hub::{ChannelPacket, CleanupStateMutex, HubStateMutex, Node};
+use secmon::models::node::{NodeDataError, NodeEvent, NodeUpdate};
 use secmon::models::packet::Response;
 use secmon::traits::iosered::IOSerialized;
+
+/// Returns a `NodeUpdate` object for `NodeEvent`.
+fn node_event(event: NodeEvent) -> NodeUpdate {
+    NodeUpdate {
+        sessions: None,
+        wg_peers: None,
+        auth_log: None,
+        event: Some(event),
+    }
+}
 
 /// Initializes node connection.
 ///
@@ -25,12 +35,7 @@ fn handle_new_node(
 
     // optionally remove possibly disconnected node of same hostname
     if get_config!(hub).assume_hostname_unique {
-        if let Some(index) = nodes
-            .iter()
-            .position(|(node, _)| node.hostname == *hostname)
-        {
-            nodes.remove(index);
-        }
+        nodes.retain(|(node, _)| node.hostname != *hostname);
     }
 
     // increment counter for nodes
@@ -47,6 +52,7 @@ fn handle_new_node(
         wg_peers: Err(NodeDataError::Initializing),
         last_state_update: UNIX_EPOCH,
         connected: true,
+        last_keepalive: UNIX_EPOCH,
     };
 
     // create channels for client <=> node communication
@@ -89,6 +95,7 @@ fn update_hub_state(
     if let NodeUpdate {
         sessions: None,
         wg_peers: None,
+        event: None, // should only be `KeepAlive`
         ..
     } = data
     {
@@ -105,13 +112,22 @@ fn update_hub_state(
             ( $node:expr, $data:expr, [$( $attr:ident ),*] ) => {
                 $(if let Some($attr) = data.$attr {
                     $node.$attr = $attr;
+                    $node.last_state_update = SystemTime::now();
                 })*
             }
         }
 
         let node = &mut nodes[index].0;
         update_node!(node, data, [sessions, wg_peers]);
-        node.last_state_update = SystemTime::now();
+
+        if let Some(event) = data.event {
+            match event {
+                NodeEvent::Connect(_) | NodeEvent::Disconnect => {} // should not occur
+                NodeEvent::KeepAlive => {
+                    node.last_keepalive = SystemTime::now();
+                }
+            }
+        }
 
         None
     } else {
@@ -208,7 +224,6 @@ fn thread_main(stream: TcpStream, hub_state: &HubStateMutex) -> Result<()> {
     } = stream.read::<Response>()?
     {
         hostname = node_hostname;
-        (serial, cmd_receiver) = handle_new_node(&address, &hostname, hub_state);
 
         if let Some(wanted) = wanted_hostname
             && wanted != hostname
@@ -218,6 +233,12 @@ fn thread_main(stream: TcpStream, hub_state: &HubStateMutex) -> Result<()> {
             ));
         }
 
+        (serial, cmd_receiver) = handle_new_node(&address, &hostname, hub_state);
+        broadcast_update(
+            serial,
+            &node_event(NodeEvent::Connect(hostname.clone())),
+            &hub_state,
+        );
         println!("{address} ({hostname}) connected and was assigned serial {serial}");
     } else {
         return Err(anyhow::anyhow!(
@@ -284,7 +305,11 @@ fn thread_main(stream: TcpStream, hub_state: &HubStateMutex) -> Result<()> {
                 }
 
                 match resp {
-                    Response::KeepAlive => {}      // don't care
+                    Response::KeepAlive => {
+                        let data = node_event(NodeEvent::KeepAlive);
+                        broadcast_update(serial, &data, &hub_state);
+                        update_hub_state(serial, &address, &hostname, data, &hub_state);
+                    }
                     Response::Connect { .. } => {} // should not occur
                     Response::NodeUpdate(data) => {
                         broadcast_update(serial, &data, &hub_state);
@@ -299,20 +324,59 @@ fn thread_main(stream: TcpStream, hub_state: &HubStateMutex) -> Result<()> {
         }();
 
         // close the stream to drop `cmd_sender` to terminate the command handling thread
+        broadcast_update(serial, &node_event(NodeEvent::Disconnect), &hub_state);
         handle_stream_close(serial, &hub_state);
 
         result
     })
 }
 
+/// Cleanup thread function for removing disconnected nodes after grace period.
+///
+/// This is a blocking function and does not exit unless interrupted.
+fn thread_cleanup(hub_state: HubStateMutex, cleanup_state: CleanupStateMutex) -> () {
+    loop {
+        let now = SystemTime::now();
+        let mut expired: Vec<u32> = Vec::new();
+
+        cleanup_state.lock().unwrap().retain(|(serial, expire)| {
+            if *expire <= now {
+                expired.push(*serial);
+                false
+            } else {
+                true
+            }
+        });
+
+        if !expired.is_empty() {
+            let mut guard = hub_state.lock().unwrap();
+            let (_, ref mut nodes, _) = *guard;
+            nodes.retain(|(node, _)| !expired.contains(&node.serial));
+        }
+
+        thread::sleep(Duration::from_secs(1));
+    }
+}
+
 /// Main function listening for incoming remote node connnections.
 ///
 /// This is a blocking function and does not exit unless interrupted.
 pub fn main(listener: TcpListener, hub_state: HubStateMutex) -> () {
+    // (serial, expire_time) pairs
+    // when node disconnects, it is added here with expire_time = now + disconnect_grace_period
+    // when expire_time < now, it is removed from hub_state and this list
+    let cleanup_state: CleanupStateMutex = Arc::new(Mutex::new(Vec::new()));
+    thread::spawn({
+        let hub_state = Arc::clone(&hub_state);
+        let cleanup_state = Arc::clone(&cleanup_state);
+        move || thread_cleanup(hub_state, cleanup_state)
+    });
+
     for stream in listener.incoming() {
         match stream {
             Ok(stream) => {
                 let hub_state: HubStateMutex = Arc::clone(&hub_state);
+                let node_cleanup: CleanupStateMutex = Arc::clone(&cleanup_state);
 
                 thread::spawn(move || {
                     let address = stream.peer_addr().unwrap();
@@ -325,23 +389,18 @@ pub fn main(listener: TcpListener, hub_state: HubStateMutex) -> () {
                     let mut guard = hub_state.lock().unwrap();
                     let (_, ref mut nodes, _) = *guard;
                     nodes.iter_mut().for_each(|(node, _)| {
+                        // immediately after disconnect, we know the address is still unique
+                        // so we extract the serial which is always unique
+                        // (we cannot trust address once we drop guard, because same address may connect again)
                         if node.address == address {
                             node.connected = false;
+                            node_cleanup.lock().unwrap().push((
+                                node.serial,
+                                SystemTime::now()
+                                    + Duration::from_secs(get_config!(hub).disconnect_grace_period),
+                            ));
                         }
                     });
-                    drop(guard); // unlock mutex before entering grace period
-
-                    thread::sleep(Duration::from_secs(
-                        get_config!(hub).disconnect_grace_period,
-                    ));
-
-                    // delete node from `hub_state` after grace period
-                    let mut guard = hub_state.lock().unwrap();
-                    let (_, ref mut nodes, _) = *guard;
-                    if let Some(index) = nodes.iter().position(|(node, _)| node.address == address)
-                    {
-                        nodes.remove(index);
-                    } // note: `ASSUME_HOSTNAME_UNIQUE` can lead to early removal
                 });
             }
             Err(e) => {

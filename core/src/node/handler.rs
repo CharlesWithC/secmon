@@ -208,7 +208,8 @@ pub fn update_node_state(node_state_mutex: &NodeStateMutex) -> (bool, NodeUpdate
         ( $node_state:expr, [$( $attr:ident ),*] ) => {{
             let mut data = NodeUpdate {
                 $($attr: None,)*
-                auth_log: None, // auth_log is not monitored here
+                auth_log: None, // not monitored here
+                event: None, // hub-exclusive attribute
             };
             let mut updated = false;
             $(if $attr != $node_state.$attr {
@@ -296,6 +297,7 @@ fn run_journalctl(
                 sessions: None,
                 wg_peers: None,
                 auth_log: Some(Ok(log)),
+                event: None,
             }));
             if let Err(_) = result {
                 // channel closed, return
@@ -319,6 +321,7 @@ fn run_journalctl(
             auth_log: Some(Err(NodeDataError::Message(format!(
                 "Error executing journalctl: {buf}"
             )))),
+            event: None,
         }));
     }
 
@@ -342,6 +345,7 @@ pub fn handle_journalctl(
             auth_log: Some(Err(NodeDataError::Message(format!(
                 "Error processing journalctl data: {e}"
             )))),
+            event: None,
         }));
         return false;
     }

@@ -35,6 +35,7 @@ pub type HubNodes = Vec<(Node, Sender<ChannelPacket>)>;
 pub type SubscribedClients = Vec<Sender<(u32, NodeUpdate)>>;
 pub type HubState = (u32, HubNodes, SubscribedClients); // (counter, nodes, subscribers)
 pub type HubStateMutex = Arc<Mutex<HubState>>;
+pub type CleanupStateMutex = Arc<Mutex<Vec<(u32, SystemTime)>>>; // (serial, expire-time)
 
 /// Instance of a node
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -53,20 +54,27 @@ pub struct Node {
     pub last_state_update: SystemTime,
     /// Whether node is connected (disconnected nodes are removed after grace period)
     pub connected: bool,
+    /// Last `KeepAlive` received from node
+    ///
+    /// Note: This only tracks `KeepAlive` and not any other types of messages.
+    /// Node should send `KeepAlive` based on an independent timer.
+    pub last_keepalive: SystemTime,
 }
 
 impl fmt::Display for Node {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let last_update_dt: DateTime<Utc> = self.last_state_update.into();
+        let last_keepalive_dt: DateTime<Utc> = self.last_keepalive.into();
         write!(
             f,
-            "Node(serial={}, hostname={:?}, address={:?}, sessions[{}], wg_peers[{}], last_update={:?})",
+            "Node(serial={}, hostname={:?}, address={:?}, sessions[{}], wg_peers[{}], last_update={:?}, last_keepalive={:?})",
             self.serial,
             self.hostname,
             self.address,
             get_display_len(&self.sessions),
             get_display_len(&self.wg_peers),
-            last_update_dt
+            last_update_dt,
+            last_keepalive_dt
         )
     }
 }

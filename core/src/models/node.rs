@@ -8,6 +8,9 @@ use std::time::SystemTime;
 
 use crate::utils::get_display_len;
 
+/// Time in seconds between `KeepAlive` messages
+pub const KEEPALIVE_INTERVAL: u64 = 60;
+
 /// Error info for an attribute of node data
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub enum NodeDataError {
@@ -53,6 +56,29 @@ impl fmt::Display for NodeState {
     }
 }
 
+/// A connection-related event. No state/data update is included.
+///
+/// This event is emitted by hub's tcp connection manager.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub enum NodeEvent {
+    /// Node connected
+    Connect(String),
+    /// Node sent a `KeepAlive` message
+    KeepAlive,
+    /// Node disconnected
+    Disconnect,
+}
+
+impl fmt::Display for NodeEvent {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Connect(hostname) => write!(f, "Connect(hostname={hostname:?})"),
+            Self::KeepAlive => write!(f, "KeepAlive"),
+            Self::Disconnect => write!(f, "Disconnect"),
+        }
+    }
+}
+
 /// Atomic update from node on tracked state, including state that is not stored
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct NodeUpdate {
@@ -62,6 +88,8 @@ pub struct NodeUpdate {
     ///
     /// Stored states do not require such wrapping as they embed errors already.
     pub auth_log: Option<AuthLogUpdate>,
+    /// Connection-related event emitted by hub.
+    pub event: Option<NodeEvent>,
 }
 
 impl fmt::Display for NodeUpdate {
@@ -79,6 +107,9 @@ impl fmt::Display for NodeUpdate {
                 Err(e) => data.push(format!("auth_log(error={e})")),
             }
         };
+        if let Some(ref event) = self.event {
+            data.push(format!("event={event}"));
+        }
         write!(f, "NodeUpdate({})", data.join(", "))
     }
 }

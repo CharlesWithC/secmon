@@ -197,9 +197,6 @@ fn exec_command(stream: &mut UnixStream, node: &Node, command: Command) -> Resul
 pub fn main(command: String, stream: &mut UnixStream) -> Result<()> {
     match command.split_whitespace().collect::<Vec<_>>().as_slice() {
         ["subscribe"] => {
-            println!("Node state atomic updates will be printed in terminal.");
-            println!("NOTE: Integrations should communicate with hub over socket.");
-
             stream.write(&ClientCommand::Subscribe)?;
             loop {
                 let resp = stream.read::<ClientResponse>()?;

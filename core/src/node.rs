@@ -9,7 +9,7 @@ mod data;
 mod handler;
 use crate::config::{CONFIG, NodeConfig, get_config};
 use crate::crypto::{NOISE_MAXLEN, NOISE_PATTERN, NoiseShared, NoisyStream};
-use secmon::models::node::{NodeDataError, NodeState};
+use secmon::models::node::{KEEPALIVE_INTERVAL, NodeDataError, NodeState};
 use secmon::models::packet::{Command, Response};
 use secmon::traits::iosered::IOSerialized;
 
@@ -140,7 +140,9 @@ pub fn main() -> Result<()> {
                         }
 
                         // handle keep alive
-                        if SystemTime::now() - Duration::from_secs(60) >= last_keepalive {
+                        if SystemTime::now() - Duration::from_secs(KEEPALIVE_INTERVAL)
+                            >= last_keepalive
+                        {
                             sw_s.send(Response::KeepAlive)?;
                             last_keepalive = SystemTime::now();
                         }
