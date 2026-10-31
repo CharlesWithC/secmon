@@ -4,6 +4,7 @@ use snow::StatelessTransportState;
 use std::fmt;
 use std::io;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use secmon::traits::iosered::IOSerialized;
 use secmon::traits::tryclone::TryClone;
@@ -23,6 +24,10 @@ pub const NOISE_KEYLEN: usize = 32;
 pub const NOISE_MAXLEN: usize = 65535;
 /// Tag length for noise protocol (with ChaChaPoly).
 pub const NOISE_TAGLEN: usize = 16;
+/// Maximum handshake message length for XK handshake.
+pub const NOISE_HANDSHAKE_MAXLEN: usize = 64;
+/// Maximum handshake time.
+pub const NOISE_HANDSHAKE_MAXTIME: Duration = Duration::from_secs(5);
 /// Plain text data chunk size for noise protocol.
 pub const NOISE_CHUNK_SIZE: usize = NOISE_MAXLEN - NOISE_TAGLEN;
 /// Maximum number of chunks allowed for each message.
@@ -120,6 +125,10 @@ impl<S: IOSerialized> IOSerialized for NoisyStream<S> {
     }
 
     fn read<T: DeserializeOwned>(&mut self) -> io::Result<T> {
+        self.read_upto(NOISE_MAX_CHUNK * NOISE_CHUNK_SIZE)
+    }
+
+    fn read_upto<T: DeserializeOwned>(&mut self, limit: usize) -> io::Result<T> {
         let Some(noise) = self.noise.as_mut() else {
             return IOSerialized::read::<T>(&mut self.stream);
         };
@@ -129,7 +138,7 @@ impl<S: IOSerialized> IOSerialized for NoisyStream<S> {
         let mut buf_pt = [0u8; NOISE_MAXLEN];
         let mut encoded: Vec<u8> = Vec::new();
 
-        let buf = self.stream.read::<Vec<u8>>()?;
+        let buf = self.stream.read_upto::<Vec<u8>>(NOISE_MAXLEN)?;
         let n = noise
             .state
             .read_message(*rx, &buf.as_slice(), &mut buf_pt)
@@ -141,13 +150,26 @@ impl<S: IOSerialized> IOSerialized for NoisyStream<S> {
                 .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?,
         ) as usize;
         if n_chunks > NOISE_MAX_CHUNK {
-            panic!(
-                "peer is attempting to send {n_chunks} chunks of data but only {NOISE_MAX_CHUNK} chunks is allowed",
-            );
+            return Err(io::Error::new(
+                io::ErrorKind::FileTooLarge,
+                format!("data contains {n_chunks} chunks, but limit is {NOISE_MAX_CHUNK} chunks"),
+            ));
+        }
+        if n_chunks * NOISE_CHUNK_SIZE > limit {
+            // note: when calling `read_upto` directly,
+            // limit should be a tigher bound than `NOISE_MAX_CHUNK * NOISE_CHUNK_SIZE`
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::FileTooLarge,
+                format!(
+                    "data is of {} bytes, but limit is {} bytes",
+                    n_chunks * NOISE_CHUNK_SIZE,
+                    limit
+                ),
+            ));
         }
 
         for _ in 1..=n_chunks {
-            let buf = self.stream.read::<Vec<u8>>()?;
+            let buf = self.stream.read_upto::<Vec<u8>>(NOISE_MAXLEN)?;
             let n = noise
                 .state
                 .read_message(*rx, &buf.as_slice(), &mut buf_pt)
@@ -168,7 +190,7 @@ pub struct Key(pub [u8; NOISE_KEYLEN]);
 
 impl Key {
     /// Returns whether a key exists, or if it's just an all-0 placeholder.
-    fn exists(&self) -> bool {
+    pub fn exists(&self) -> bool {
         return !self.0.iter().all(|&x| x == 0);
     }
 }
@@ -240,7 +262,7 @@ impl fmt::Debug for Key {
         if !self.exists() {
             write!(f, "none")
         } else {
-            write!(f, "{:?}", BASE64.encode(self.0))
+            write!(f, "redacted")
         }
     }
 }

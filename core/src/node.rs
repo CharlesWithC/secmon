@@ -1,6 +1,6 @@
 use anyhow::{Result, anyhow};
-use crossbeam_channel::unbounded;
-use std::net::TcpStream;
+use crossbeam_channel::{bounded, unbounded};
+use std::net::{Shutdown, TcpStream};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, SystemTime};
@@ -8,10 +8,14 @@ use std::time::{Duration, SystemTime};
 mod data;
 mod handler;
 use crate::config::{CONFIG, NodeConfig, get_config};
-use crate::crypto::{NOISE_MAXLEN, NOISE_PATTERN, NoiseShared, NoisyStream};
+use crate::crypto::{
+    NOISE_HANDSHAKE_MAXLEN, NOISE_HANDSHAKE_MAXTIME, NOISE_MAXLEN, NOISE_PATTERN, NoiseShared,
+    NoisyStream,
+};
 use secmon::models::node::{KEEPALIVE_INTERVAL, NodeDataError, NodeState};
 use secmon::models::packet::{Command, Response};
 use secmon::traits::iosered::IOSerialized;
+use secmon::utils::deadline_watchdog;
 
 /// Node-side main function to communicate with hub.
 ///
@@ -51,15 +55,34 @@ pub fn main() -> Result<()> {
                 let mut ct = [0u8; NOISE_MAXLEN]; // buffer for encrypted handshake data
                 let mut pt = [0u8; NOISE_MAXLEN]; // empty buffer to make noise happy
 
+                let killer = stream.stream.try_clone()?;
+                let (watchdog_tx, watchdog_rx) = bounded::<()>(1);
+                deadline_watchdog(
+                    watchdog_rx,
+                    NOISE_HANDSHAKE_MAXTIME,
+                    || {},
+                    move || {
+                        println!(
+                            "Hub failed to complete noise protocol handshake (timeout after {} seconds)",
+                            NOISE_HANDSHAKE_MAXTIME.as_secs()
+                        );
+                        killer
+                            .shutdown(Shutdown::Both)
+                            .expect("shutdown should succeed");
+                    },
+                );
+
                 // -> e, es
                 let n = noise.write_message(&[], &mut ct)?;
                 stream.write(&ct[..n].to_vec())?;
                 // <- e, ee
-                let buf = stream.read::<Vec<u8>>()?;
+                let buf = stream.read_upto::<Vec<u8>>(NOISE_HANDSHAKE_MAXLEN)?;
                 noise.read_message(buf.as_slice(), &mut pt)?;
                 // -> s, ee
                 let n = noise.write_message(&[], &mut ct)?;
                 stream.write(&ct[..n].to_vec())?;
+
+                watchdog_tx.send(())?; // send watchdog signal once handshake is done
 
                 if !noise.is_handshake_finished() {
                     return Err(anyhow::anyhow!(

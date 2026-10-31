@@ -155,6 +155,9 @@ pub struct NodeConfig {
     /// Label-command dictionary of whitelisted commands.
     ///
     /// Label should not start with '-' to avoid conflicting with command line arguments.
+    ///
+    /// Command output should be smaller than 63.98MB, otherwise transmitting the result might cause a panic.
+    /// This is only applicable to non-streamed output, and the size is set by `NOISE_MAX_CHUNK` in `crypto.rs`.
     pub command_allowlist: BTreeMap<String, String>,
 
     /// Noise protocol configuration.

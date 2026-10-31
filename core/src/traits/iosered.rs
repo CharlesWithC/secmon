@@ -3,10 +3,14 @@ use std::io::{Read, Result, Write};
 
 /// Trait for serializing and deserializing data.
 pub trait IOSerialized {
-    /// Serialize `data` and write serialized data.
+    /// Serialize `data` and write serialized buffer.
     fn write<T: Serialize>(&mut self, data: &T) -> Result<()>;
-    /// Read data and return deserialized data.
+    /// Read buffer and return deserialized data.
     fn read<T: DeserializeOwned>(&mut self) -> Result<T>;
+    /// Read buffer of up to `limit` bytes and return deserialized data.
+    ///
+    /// Return an error if buffer is over size limit.
+    fn read_upto<T: DeserializeOwned>(&mut self, limit: usize) -> Result<T>;
 }
 
 /// Implementation of `IOSerialized` for structs that implement `Read` and `Write`.
@@ -25,9 +29,19 @@ impl<S: Read + Write> IOSerialized for S {
     }
 
     fn read<T: DeserializeOwned>(&mut self) -> Result<T> {
+        self.read_upto(u32::MAX as usize)
+    }
+
+    fn read_upto<T: DeserializeOwned>(&mut self, limit: usize) -> Result<T> {
         let mut len_buf = [0u8; 4];
         self.read_exact(&mut len_buf)?;
         let len = u32::from_be_bytes(len_buf) as usize;
+        if len > limit {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::FileTooLarge,
+                format!("data is of {len} bytes, but limit is {limit} bytes"),
+            ));
+        }
 
         let mut data = vec![0u8; len];
         self.read_exact(&mut data)?;

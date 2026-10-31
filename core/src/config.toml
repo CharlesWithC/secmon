@@ -63,6 +63,8 @@ preshared_key = ""                      # optional; 32-bit global preshared key
 
 # label-command pairs for whitelisted commands
 # label should not start with '-' which can conflict with command line options
+# command output should be smaller than 63.98MB, otherwise might cause panic
+# (for non-streamed output; size set by `NOISE_MAX_CHUNK` in `crypto.rs`)
 [node.command_allowlist]
 update = "apt update -y"
 reboot = "shutdown -r"

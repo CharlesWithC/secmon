@@ -1,7 +1,10 @@
+use crossbeam_channel::Receiver;
 use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::Path;
 use std::str::FromStr;
+use std::thread;
+use std::time::Duration;
 use std::{env, process};
 use users::get_current_uid;
 
@@ -88,4 +91,25 @@ pub fn is_streaming_response(response: &Response) -> bool {
         | Response::NodeUpdate(_)
         | Response::Result { .. } => false,
     }
+}
+
+/// Spawns a thread to check if anything is sent over `channel` within `deadline`.
+///
+/// If yes, then call `callback_success`. Otherwise, call `callback_fail`.
+pub fn deadline_watchdog<F, G>(
+    rx: Receiver<()>,
+    deadline: Duration,
+    callback_success: F,
+    callback_fail: G,
+) -> ()
+where
+    F: FnOnce() + Send + 'static,
+    G: FnOnce() + Send + 'static,
+{
+    thread::spawn(move || {
+        match rx.recv_timeout(deadline) {
+            Ok(_) => callback_success(), // success if anything is received
+            Err(_) => callback_fail(), // disconnect (rx is dropped) or timeout (deadline is reached)
+        }
+    });
 }

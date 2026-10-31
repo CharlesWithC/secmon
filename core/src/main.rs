@@ -10,8 +10,8 @@ mod config;
 mod crypto;
 mod hub;
 mod node;
-use crate::config::{CONFIG, Config, VERBOSE};
-use crate::crypto::{NOISE_KEYLEN, Key, NOISE_PATTERN};
+use crate::config::{CONFIG, Config, VERBOSE, get_config};
+use crate::crypto::{Key, NOISE_KEYLEN, NOISE_PATTERN};
 use secmon::utils::{get_env_var, get_socket_path};
 
 const USAGE: &str = "Usage:
@@ -178,6 +178,13 @@ fn sanitize_args(args: &Vec<String>) -> Vec<String> {
 fn launch(args: &Vec<String>) -> Result<()> {
     match args.get(1).unwrap().as_str() {
         "hub" => {
+            let noise = &get_config!(hub).noise;
+            if noise.enable {
+                if !noise.private_key.exists() {
+                    bail!("Invalid config: Noise protocol is enabled but `private_key` is not set");
+                }
+            }
+
             let socket_path = get_socket_path();
             if fs::exists(&socket_path)
                 .map_err(|e| anyhow!("Unable to access {socket_path}: {e}"))?
@@ -189,6 +196,18 @@ fn launch(args: &Vec<String>) -> Result<()> {
             crate::hub::main_daemon(socket_path)?;
         }
         "node" => {
+            let noise = &get_config!(node).noise;
+            if noise.enable {
+                if !noise.private_key.exists() {
+                    bail!("Invalid config: Noise protocol is enabled but `private_key` is not set");
+                }
+                if !noise.hub_public_key.exists() {
+                    bail!(
+                        "Invalid config: Noise protocol is enabled but `hub_public_key` is not set"
+                    );
+                }
+            }
+
             crate::node::main()?;
         }
         _ => {
