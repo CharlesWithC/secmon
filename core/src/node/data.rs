@@ -117,6 +117,8 @@ pub fn get_wg_peers() -> Result<Vec<WgPeer>, String> {
 }
 
 /// Parses a single line of journalctl log and returns the parsed result.
+///
+/// Note: We assume usernames do not contain spaces.
 pub fn parse_journalctl_log(line: String) -> Result<Option<AuthLog>> {
     let parts = line.split_whitespace().collect::<Vec<_>>();
 
@@ -140,6 +142,17 @@ pub fn parse_journalctl_log(line: String) -> Result<Option<AuthLog>> {
             })),
         #[rustfmt::skip]
         ["Failed", "password", "for", user, "from", host, "port", port, ..] =>
+            Ok(Some(AuthLog {
+                time,
+                process,
+                user: user.to_owned(),
+                detail: AuthLogDetail::SshFailPassword {
+                    host: host.to_owned(),
+                    port: port.parse()?,
+                },
+            })),
+        #[rustfmt::skip]
+        ["Failed", "password", "for", "invalid", "user", user, "from", host, "port", port, ..] =>
             Ok(Some(AuthLog {
                 time,
                 process,

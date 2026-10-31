@@ -337,17 +337,32 @@ pub fn handle_journalctl(
     sw_s: &Sender<Response>,
     child_opt_mutex: &Arc<Mutex<Option<process::Child>>>,
 ) -> bool {
-    let result = run_journalctl(sw_s, child_opt_mutex);
-    if let Err(e) = result {
-        let _ = sw_s.send(Response::NodeUpdate(NodeUpdate {
-            sessions: None,
-            wg_peers: None,
-            auth_log: Some(Err(NodeDataError::Message(format!(
-                "Error processing journalctl data: {e}"
-            )))),
-            event: None,
-        }));
-        return false;
-    }
-    return true;
+    use std::panic::{AssertUnwindSafe, catch_unwind};
+    match catch_unwind(AssertUnwindSafe(|| run_journalctl(sw_s, child_opt_mutex))) {
+        Ok(result) => {
+            if let Err(e) = result {
+                let _ = sw_s.send(Response::NodeUpdate(NodeUpdate {
+                    sessions: None,
+                    wg_peers: None,
+                    auth_log: Some(Err(NodeDataError::Message(format!(
+                        "Error processing journalctl data: {e}"
+                    )))),
+                    event: None,
+                }));
+                return false;
+            }
+            return true;
+        }
+        Err(e) => {
+            let _ = sw_s.send(Response::NodeUpdate(NodeUpdate {
+                sessions: None,
+                wg_peers: None,
+                auth_log: Some(Err(NodeDataError::Message(format!(
+                    "Error processing journalctl data: {e:?}"
+                )))),
+                event: None,
+            }));
+            return false;
+        }
+    };
 }

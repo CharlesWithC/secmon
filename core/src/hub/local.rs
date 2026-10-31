@@ -43,6 +43,7 @@ fn handle_raw_command(
     if let Some((_, sender)) = nodes.iter().find(|(node, _)| node.serial == serial) {
         let (resp_s, resp_r) = unbounded::<Response>();
         if let Err(e) = sender.send((command, resp_s, expire_time)) {
+            drop(guard);
             stream.write(&ClientResponse::Error(format!("{e}")))?;
             return Ok(());
         }
@@ -60,6 +61,7 @@ fn handle_raw_command(
             }
         }
     } else {
+        drop(guard);
         stream.write(&ClientResponse::Error(format!(
             "SERIAL={serial} is not a recognized node"
         )))?;
@@ -99,9 +101,11 @@ fn thread_main(mut stream: UnixStream, hub_state: HubStateMutex) -> Result<()> {
             ClientCommand::ListNodes => {
                 let guard = hub_state.lock().unwrap();
                 let (_, ref nodes, _) = *guard;
-                stream.write(&ClientResponse::Nodes(
+                let nodes = ClientResponse::Nodes(
                     nodes.into_iter().map(|(node, _)| node.clone()).collect(),
-                ))?;
+                );
+                drop(guard);
+                stream.write(&nodes)?;
             }
             ClientCommand::FindNode { query } => {
                 let resp = find_node(query, &hub_state);
