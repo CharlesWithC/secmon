@@ -1,5 +1,5 @@
 use secmon::models::hub::Node;
-use secmon::models::node::{AuthLog, AuthLogDetail, NodeUpdate};
+use secmon::models::node::{AuthLog, AuthLogDetail, NodeEvent, NodeUpdate};
 
 use crate::models::{Embed, EmbedField};
 
@@ -85,6 +85,20 @@ pub fn parse_node_update(node: &Node, data: &NodeUpdate) -> Option<Embed> {
                 set_title!("ERROR");
                 embed.description += format!("\n\n`{e}").as_str();
             }
+        }
+    }
+
+    if let Some(ref event) = data.event {
+        match event {
+            NodeEvent::Connect(_) => {
+                ok = true;
+                set_title!("Node connected");
+            }
+            NodeEvent::Disconnect => {
+                ok = true;
+                set_title!("Node disconnected");
+            }
+            NodeEvent::KeepAlive => {} // do nothing if it's keepalive
         }
     }
 

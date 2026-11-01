@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use chrono_tz::Tz;
 
 use secmon::models::hub::Node;
-use secmon::models::node::{AuthLog, AuthLogDetail, NodeDataError, NodeUpdate};
+use secmon::models::node::{AuthLog, AuthLogDetail, NodeDataError, NodeEvent, NodeUpdate};
 use secmon::models::packet::{Response, ResultStatus};
 
 /// Returns node update parsed in user-friendly format.
@@ -62,6 +62,20 @@ pub fn parse_node_update(node: &Node, data: &NodeUpdate) -> Option<String> {
                 }
             },
             Err(e) => result += &format!("[ERROR] {e}"),
+        }
+    }
+
+    if let Some(ref event) = data.event {
+        match event {
+            NodeEvent::Connect(_) => {
+                ok = true;
+                result += &format!("Node connected.\n");
+            }
+            NodeEvent::Disconnect => {
+                ok = true;
+                result += &format!("Node disconnected.\n");
+            }
+            NodeEvent::KeepAlive => {} // do nothing if it's keepalive
         }
     }
 
