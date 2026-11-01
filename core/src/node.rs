@@ -15,6 +15,7 @@ use crate::crypto::{
 use secmon::models::node::{KEEPALIVE_INTERVAL, NodeDataError, NodeState};
 use secmon::models::packet::{Request, Response};
 use secmon::traits::iosered::IOSerialized;
+use secmon::traits::tryclone::TryClone;
 use secmon::utils::deadline_watchdog;
 
 /// Node-side main function to communicate with hub.

@@ -14,6 +14,7 @@ use secmon::models::hub::{ChannelPacket, CleanupStateMutex, HubStateMutex, Node}
 use secmon::models::node::{KEEPALIVE_INTERVAL, NodeDataError, NodeEvent, NodeUpdate};
 use secmon::models::packet::Response;
 use secmon::traits::iosered::IOSerialized;
+use secmon::traits::tryclone::TryClone;
 use secmon::utils::deadline_watchdog;
 
 /// Returns a `NodeUpdate` object for `NodeEvent`.

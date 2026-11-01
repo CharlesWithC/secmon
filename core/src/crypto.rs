@@ -73,8 +73,8 @@ pub struct NoisyStream<S: IOSerialized> {
 }
 
 /// Implement `try_clone` for `NoisyStream` to mimic `TcpStream` behavior.
-impl<S: IOSerialized + TryClone> NoisyStream<S> {
-    pub fn try_clone(&self) -> io::Result<Self> {
+impl<S: IOSerialized + TryClone> TryClone for NoisyStream<S> {
+    fn try_clone(&self) -> io::Result<Self> {
         Ok(Self {
             stream: TryClone::try_clone(&self.stream)?,
             noise: self.noise.clone(),
