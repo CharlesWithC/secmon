@@ -13,7 +13,7 @@ use std::thread;
 use std::time::Duration;
 
 use secmon::models::hub::{ClientCommand, ClientResponse};
-use secmon::models::packet::Command;
+use secmon::models::packet::Request;
 use secmon::traits::iosered::IOSerialized;
 use secmon::utils::{get_env_var, get_env_var_strict, get_socket_path, read_lines};
 use secmon_http::utils;
@@ -100,7 +100,7 @@ fn handle_message(
     match message.split_whitespace().collect::<Vec<_>>().as_slice() {
         ["list"] | ["-"] => {
             let mut nodes = utils::list_nodes()?;
-            nodes.sort_by(|a, b| a.address.cmp(&b.address));
+            nodes.sort_by(|a, b| a.hostname.cmp(&b.hostname));
             send_message(parser::parse_node_list(tz, &nodes));
         }
         [node] => {
@@ -133,7 +133,7 @@ fn handle_message(
                     Ok(lines) => {
                         for line in lines.map_while(Result::ok) {
                             if command_label == line {
-                                let command = Command::Execute {
+                                let command = Request::Execute {
                                     command_label,
                                     stream: false,
                                 };

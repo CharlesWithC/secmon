@@ -9,7 +9,7 @@ use crate::config::{CONFIG, get_config};
 use crate::{VERBOSE, vprintln};
 use secmon::models::hub::{ClientCommand, ClientResponse, Node};
 use secmon::models::node::NodeDataError;
-use secmon::models::packet::{Command, Response, ResultStatus};
+use secmon::models::packet::{Request, Response, ResultStatus};
 use secmon::traits::iosered::IOSerialized;
 
 macro_rules! match_strict {
@@ -110,7 +110,7 @@ fn print_node(node: &Node) -> () {
 }
 
 /// Executes command on a specific node and streams result.
-fn exec_command(stream: &mut UnixStream, node: &Node, command: Command) -> Result<()> {
+fn exec_command(stream: &mut UnixStream, node: &Node, command: Request) -> Result<()> {
     let mut wait_timeout = get_config!(client).node_wait_timeout;
     let expire_time = match wait_timeout {
         0 => UNIX_EPOCH,
@@ -225,7 +225,7 @@ pub fn main(command: String, stream: &mut UnixStream) -> Result<()> {
             print_node(&node);
         }
         [node, label @ ..] => {
-            let command = Command::Execute {
+            let command = Request::Execute {
                 command_label: label.join(" "),
                 stream: true,
             };

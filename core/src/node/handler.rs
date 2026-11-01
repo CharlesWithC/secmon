@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use crate::config::{CONFIG, get_config};
 use secmon::models::node::{NodeDataError, NodeStateMutex, NodeUpdate};
-use secmon::models::packet::{Command, Response, ResultStatus};
+use secmon::models::packet::{Request, Response, ResultStatus};
 use secmon::traits::exec::{ChildWait, CommandExec, ExecResult};
 
 /// Handles raw command execution.
@@ -129,15 +129,15 @@ fn handle_exec_command(
 /// Handles command from hub.
 pub fn handle_command(
     sw_s: &Sender<Response>,
-    command: &Command,
+    command: &Request,
     node_state_mutex: &NodeStateMutex,
 ) -> Result<()> {
     match command {
-        Command::NodeState => {
+        Request::NodeState => {
             let node_state = node_state_mutex.lock().unwrap();
             sw_s.send(Response::NodeState(node_state.clone()))?;
         }
-        Command::Execute {
+        Request::Execute {
             command_label,
             stream,
         } => {

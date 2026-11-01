@@ -3,7 +3,7 @@ use std::os::unix::net::UnixStream;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use secmon::models::hub::{ClientCommand, ClientResponse, Node};
-use secmon::models::packet::{Command, Response};
+use secmon::models::packet::{Request, Response};
 use secmon::traits::iosered::IOSerialized;
 use secmon::utils::get_socket_path;
 
@@ -22,11 +22,11 @@ macro_rules! match_response {
 }
 
 /// Returns whether a client-hub request would result in streamed response.
-pub fn is_streaming_command(command: &Command) -> bool {
+pub fn is_streaming_command(command: &Request) -> bool {
     // we don't use catch-all to ensure this method is updated when a new response is added
     match command {
-        Command::Execute { stream: true, .. } => true,
-        Command::Execute { stream: false, .. } | Command::NodeState => false,
+        Request::Execute { stream: true, .. } => true,
+        Request::Execute { stream: false, .. } | Request::NodeState => false,
     }
 }
 
@@ -65,7 +65,7 @@ pub fn list_nodes() -> Result<Vec<Node>> {
 /// Executes command on a specific node and returns result.
 ///
 /// Note: Streaming result is not enabled. This will block until command execution completes.
-pub fn raw_command(node: &Node, command: Command, expires_in: u64) -> Result<Response> {
+pub fn raw_command(node: &Node, command: Request, expires_in: u64) -> Result<Response> {
     let raw_resp = execute_command(
         &ClientCommand::RawCommand {
             node_serial: node.serial,

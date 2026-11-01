@@ -5,9 +5,11 @@ use std::sync::Arc;
 use std::thread;
 use std::time::SystemTime;
 
+use crate::config::VERBOSE;
+use crate::vprintln;
 use secmon::models::hub::{ClientCommand, ClientResponse, HubStateMutex};
 use secmon::models::node::NodeUpdate;
-use secmon::models::packet::{Command, Response};
+use secmon::models::packet::{Request, Response};
 use secmon::traits::iosered::IOSerialized;
 
 /// Returns the result of finding a node based on a string-based query.
@@ -34,7 +36,7 @@ fn find_node(query: String, hub_state: &HubStateMutex) -> ClientResponse {
 /// handled by client and node. Hub would only act as a data transporter.
 fn handle_raw_command(
     mut stream: &UnixStream,
-    (serial, command, expire_time): (u32, Command, SystemTime),
+    (serial, command, expire_time): (u32, Request, SystemTime),
     hub_state: &HubStateMutex,
 ) -> Result<()> {
     let guard = hub_state.lock().unwrap();
@@ -133,7 +135,10 @@ pub fn main(listener: UnixListener, hub_state: HubStateMutex) -> () {
 
                 thread::spawn(move || {
                     if let Err(e) = thread_main(stream, hub_state) {
-                        eprintln!("Error while handling local connection: {e}");
+                        // this is triggered whenever client disconnect
+                        // which is almost always "failed to fill buffer"
+                        // so we use `vprintln` instead of `eprintln`
+                        vprintln!("Error while handling local connection: {e}");
                     }
                 });
             }

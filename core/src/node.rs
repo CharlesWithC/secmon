@@ -13,7 +13,7 @@ use crate::crypto::{
     NoisyStream,
 };
 use secmon::models::node::{KEEPALIVE_INTERVAL, NodeDataError, NodeState};
-use secmon::models::packet::{Command, Response};
+use secmon::models::packet::{Request, Response};
 use secmon::traits::iosered::IOSerialized;
 use secmon::utils::deadline_watchdog;
 
@@ -97,14 +97,26 @@ pub fn main() -> Result<()> {
                 }));
             }
 
-            println!("Connected to hub {ip}:{port}");
-            last_connect_successful = true;
-            reconnect_wait = 100;
-
             // respond hostname on new connection
             stream.write(&Response::Connect {
                 hostname: node_config.hostname.clone(),
             })?;
+
+            // confirm acknowledgement of connection
+            // this is necessary because noise protocol may silently fail a connection
+            match stream.read::<Response>()? {
+                Response::Connect { hostname } if hostname == node_config.hostname.clone() => {
+                    println!("Connected to hub {ip}:{port}");
+
+                    last_connect_successful = true;
+                    reconnect_wait = 100;
+                }
+                _ => {
+                    return Err(anyhow::anyhow!(
+                        "Failed to complete noise protocol handshake"
+                    ));
+                }
+            }
 
             // sender & receiver for stream writer (`sw`)
             // everything to be sent to stream should be sent to `sw_s`
@@ -210,7 +222,7 @@ pub fn main() -> Result<()> {
             // note: this is a blocking function that terminates on stream close
             let result = move || -> Result<()> {
                 loop {
-                    let command = stream.read::<Command>()?;
+                    let command = stream.read::<Request>()?;
                     println!("Received {command}");
                     handler::handle_command(&sw_s, &command, &node_state_mutex)?;
                 }

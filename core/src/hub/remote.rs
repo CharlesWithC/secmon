@@ -11,7 +11,7 @@ use crate::crypto::{
     NoisyStream,
 };
 use secmon::models::hub::{ChannelPacket, CleanupStateMutex, HubStateMutex, Node};
-use secmon::models::node::{NodeDataError, NodeEvent, NodeUpdate};
+use secmon::models::node::{KEEPALIVE_INTERVAL, NodeDataError, NodeEvent, NodeUpdate};
 use secmon::models::packet::Response;
 use secmon::traits::iosered::IOSerialized;
 use secmon::utils::deadline_watchdog;
@@ -165,6 +165,12 @@ fn thread_main(stream: TcpStream, hub_state: &HubStateMutex) -> Result<()> {
     let address = stream.peer_addr().unwrap();
     let hostname;
 
+    // set timeout to 3 keepalives
+    // i.e. if we miss 3 consecutive keepalives, we kill the connection
+    //      this prevents a connection from hanging forever if node dies
+    stream.set_write_timeout(Some(Duration::from_secs(KEEPALIVE_INTERVAL * 3)))?;
+    stream.set_read_timeout(Some(Duration::from_secs(KEEPALIVE_INTERVAL * 3)))?;
+
     // wrap stream
     // note: encryption is disabled during handshake as `noise=None`
     let mut stream = NoisyStream {
@@ -268,6 +274,11 @@ fn thread_main(stream: TcpStream, hub_state: &HubStateMutex) -> Result<()> {
             "Invalid initial response: Should be Response::Connect"
         ));
     }
+
+    // ack with node hostname to confirm connection establishment
+    stream.write(&Response::Connect {
+        hostname: hostname.clone(),
+    })?;
 
     thread::scope(|s| {
         // sender & receiver for stream reader (`sr`)

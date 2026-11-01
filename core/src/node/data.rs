@@ -4,7 +4,7 @@ use std::process::Command;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use secmon::models::node::{AuthLog, AuthLogDetail, Session, WgPeer};
-use secmon::traits::exec::CommandExec;
+use secmon::traits::exec::{CommandExec, ExecResult};
 
 /// Executes `who -w` and returns parsed result.
 ///
@@ -12,9 +12,23 @@ use secmon::traits::exec::CommandExec;
 pub fn get_sessions() -> Result<Vec<Session>, String> {
     let mut sessions = Vec::<Session>::new();
 
-    let mut command = Command::new("who");
+    // on ubuntu >= 25.10, `who` gives empty output, but `gnuwho` still gives output
+    // thus, we first try `gnuwho` (if it exists, then we're likely on latest ubuntu),
+    // and fallback to `who` (which implies we're likely not on latest ubuntu)
+    // note: if `gnuwho` fails in the future, we might have to consider /run/systemd/sessions
+    //       though it is marked as "This is private data. Do not parse.".
+    let res_who: ExecResult;
+    let mut command = Command::new("gnuwho");
     command.args(["-w"]).env("LC_ALL", "C.UTF-8");
-    let res_who = command.run(None)?;
+    if let Ok(result) = command.run(None) {
+        // `gnuwho` exists
+        res_who = result;
+    } else {
+        // `gnuwho` does not exist (or forwhatever reason we cannot execute it)
+        let mut command = Command::new("who");
+        command.args(["-w"]).env("LC_ALL", "C.UTF-8");
+        res_who = command.run(None)?;
+    }
     if !res_who.status.success() {
         return Err(format!("{}", res_who));
     }
@@ -53,18 +67,14 @@ pub fn get_sessions() -> Result<Vec<Session>, String> {
     Ok(sessions)
 }
 
-/// Executes `wg` twice and returns parsed result.
-///
-/// Note: `wg show` only supports one attribute in each run, with output
-/// format (interface, peer, <attribute>); thus, we run `wg show` twice
-/// with different arguments.
+/// Executes `wg show all dump` and returns parsed result.
 ///
 /// If an error occurs, returns a string-based error.
 pub fn get_wg_peers() -> Result<Vec<WgPeer>, String> {
     let mut wg_peers = Vec::<WgPeer>::new();
 
     let mut command = Command::new("wg");
-    command.args(["show", "all", "endpoints"]);
+    command.args(["show", "all", "dump"]);
 
     let res_endpoints = command.run(None)?;
     if !res_endpoints.status.success() {
@@ -73,44 +83,22 @@ pub fn get_wg_peers() -> Result<Vec<WgPeer>, String> {
 
     for line in res_endpoints.output.lines() {
         let parts = line.split_whitespace().collect::<Vec<_>>();
-        if parts.len() < 3 {
-            return Err(format!("command 'wg' did not produce a valid output"));
+        if parts.len() == 9 {
+            wg_peers.push(WgPeer {
+                interface: parts[0].to_owned(),
+                peer: parts[1].to_owned(),
+                endpoint: match parts[3] {
+                    "(none)" => None,
+                    endpoint @ _ => Some(endpoint.to_owned()),
+                },
+                latest_handshake: match parts[5].parse::<u64>() {
+                    Ok(timestamp) if timestamp != 0 => {
+                        Some(UNIX_EPOCH + Duration::from_secs(timestamp))
+                    }
+                    _ => None,
+                },
+            });
         }
-
-        wg_peers.push(WgPeer {
-            interface: parts[0].to_owned(),
-            peer: parts[1].to_owned(),
-            endpoint: match parts[2] {
-                "(none)" => None,
-                endpoint @ _ => Some(endpoint.to_owned()),
-            },
-            latest_handshake: None,
-        })
-    }
-
-    let mut command = Command::new("wg");
-    command.args(["show", "all", "latest-handshakes"]);
-    let res_handshake = command.run(None)?;
-    if !res_handshake.status.success() {
-        return Err(format!("{}", res_handshake));
-    }
-
-    for line in res_handshake.output.lines() {
-        let parts = line.split_whitespace().collect::<Vec<_>>();
-        if parts.len() < 3 {
-            return Err(format!("command 'wg' did not produce a valid output"));
-        }
-
-        wg_peers.iter_mut().for_each(|wg_peer| {
-            if wg_peer.peer.as_str() == parts[1] {
-                let timestamp_res = parts[2].parse::<u64>();
-                if let Ok(timestamp) = timestamp_res
-                    && timestamp != 0
-                {
-                    wg_peer.latest_handshake = Some(UNIX_EPOCH + Duration::from_secs(timestamp));
-                }
-            }
-        })
     }
 
     Ok(wg_peers)
@@ -119,6 +107,7 @@ pub fn get_wg_peers() -> Result<Vec<WgPeer>, String> {
 /// Parses a single line of journalctl log and returns the parsed result.
 ///
 /// Note: We assume usernames do not contain spaces.
+///       Also, you should NOT allow password login in ssh at all!
 pub fn parse_journalctl_log(line: String) -> Result<Option<AuthLog>> {
     let parts = line.split_whitespace().collect::<Vec<_>>();
 
@@ -142,17 +131,6 @@ pub fn parse_journalctl_log(line: String) -> Result<Option<AuthLog>> {
             })),
         #[rustfmt::skip]
         ["Failed", "password", "for", user, "from", host, "port", port, ..] =>
-            Ok(Some(AuthLog {
-                time,
-                process,
-                user: user.to_owned(),
-                detail: AuthLogDetail::SshFailPassword {
-                    host: host.to_owned(),
-                    port: port.parse()?,
-                },
-            })),
-        #[rustfmt::skip]
-        ["Failed", "password", "for", "invalid", "user", user, "from", host, "port", port, ..] =>
             Ok(Some(AuthLog {
                 time,
                 process,

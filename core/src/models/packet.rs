@@ -3,12 +3,12 @@ use std::fmt;
 
 use crate::models::node::{NodeState, NodeUpdate};
 
-/// Command sent from hub to node
+/// Request sent from hub to node
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub enum Command {
+pub enum Request {
     /// Request current node state
     ///
-    /// Note: Technically there is no reason to use this command, since hub stores the
+    /// Note: Technically there is no reason to use this request, since hub stores the
     /// state and client should simply request the data from hub.
     NodeState,
 
@@ -21,17 +21,17 @@ pub enum Command {
     Execute { command_label: String, stream: bool },
 }
 
-impl fmt::Display for Command {
+impl fmt::Display for Request {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::NodeState => write!(f, "Command::NodeState"),
+            Self::NodeState => write!(f, "Request::NodeState"),
             Self::Execute {
                 command_label,
                 stream,
             } => {
                 write!(
                     f,
-                    "Command::Execute(command_label=\"{command_label}\", stream={stream})",
+                    "Request::Execute(command_label=\"{command_label}\", stream={stream})",
                 )
             }
         }

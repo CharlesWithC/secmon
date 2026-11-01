@@ -1,7 +1,7 @@
 use actix_web::{HttpRequest, HttpResponse, Responder, get, post, web};
 
 use secmon::models::hub::Node;
-use secmon::models::packet::{Command, Response};
+use secmon::models::packet::{Request, Response};
 
 use crate::models::HttpError;
 use crate::utils;
@@ -44,7 +44,7 @@ pub async fn get_node(path: web::Path<String>) -> impl Responder {
 pub async fn post_execute(
     request: HttpRequest,
     path: web::Path<String>,
-    command: web::Json<Command>,
+    command: web::Json<Request>,
 ) -> impl Responder {
     if utils::is_streaming_command(&command) {
         bad_request!("Streaming response is not supported.");

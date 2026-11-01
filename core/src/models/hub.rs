@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
 use crate::models::node::{NodeUpdate, Sessions, WgPeers};
-use crate::models::packet::{Command, Response};
+use crate::models::packet::{Request, Response};
 use crate::utils::get_display_len;
 
 /// Represents command sent in channel between local command and remote node handler.
@@ -18,7 +18,7 @@ use crate::utils::get_display_len;
 /// `SystemTime` decides past what time should a channel packet be ignored.
 ///
 /// This is as if sending a mail with a return envelop attached.
-pub type ChannelPacket = (Command, Sender<Response>, SystemTime);
+pub type ChannelPacket = (Request, Sender<Response>, SystemTime);
 /// Represents a vector of connected nodes.
 ///
 /// `Sender<ChannelPacket>` is a long-living channel to send local commands to.
@@ -97,7 +97,7 @@ pub enum ClientCommand {
     /// Raw command to be directly relayed to node
     RawCommand {
         node_serial: u32,
-        command: Command,
+        command: Request,
         expire_time: SystemTime,
     },
 }
