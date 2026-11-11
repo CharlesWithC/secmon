@@ -39,6 +39,9 @@ fn print_node(node: &Node) -> () {
         }
     );
     println!("  {}: {}", "serial".bold(), node.serial);
+    if let Some(ref group) = node.group {
+        println!("  {}: {}", "group".bold(), group);
+    };
     println!("  {}: {}", "address".bold(), node.address);
     let last_state_update_dt: DateTime<Local> = node.last_state_update.into();
     println!(
@@ -66,7 +69,7 @@ fn print_node(node: &Node) -> () {
     match &node.sessions {
         Ok(sessions) => {
             if sessions.len() > 0 {
-                println!("\n{}:", "sessions".yellow().bold());
+                println!("{}:", "sessions".yellow().bold());
                 let max_user_len = sessions
                     .into_iter()
                     .map(|session| session.user.len())
@@ -93,7 +96,7 @@ fn print_node(node: &Node) -> () {
 
     match &node.wg_peers {
         Ok(wg_peers) => wg_peers.into_iter().for_each(|wg_peer| {
-            println!("\n{}: {}", "wg peer".yellow().bold(), wg_peer.peer);
+            println!("{}: {}", "wg peer".yellow().bold(), wg_peer.peer);
             println!("  {}: {}", "interface".bold(), wg_peer.interface);
             if let Some(endpoint) = &wg_peer.endpoint {
                 println!("  {}: {}", "endpoint".bold(), endpoint);
@@ -203,50 +206,34 @@ pub fn main(command: String, stream: &mut UnixStream) -> Result<()> {
                 println!("{}", resp);
             }
         }
-        ["list"] | ["-"] => {
-            stream.write(&ClientCommand::ListNodes)?;
-            let resp = stream.read::<ClientResponse>()?;
-            let mut nodes = match_strict!(resp, ClientResponse::Nodes(nodes), nodes);
-            nodes.sort_by(|a, b| a.hostname.cmp(&b.hostname));
+        // note: label may be empty; this indicates listing nodes
+        [query @ ("-" | _), label @ ..] => {
+            if query == &"-" {
+                stream.write(&ClientCommand::ListNodes)?;
+            } else {
+                stream.write(&ClientCommand::FindNodes {
+                    query: (*query).to_owned(),
+                })?;
+            }
 
-            for (i, node) in nodes.iter().enumerate() {
+            let command = match label.is_empty() {
+                true => None,
+                false => Some(Request::Execute {
+                    command_label: label.join(" "),
+                    stream: true,
+                }),
+            };
+
+            let resp = stream.read::<ClientResponse>()?;
+            let nodes = match_strict!(resp, ClientResponse::Nodes(nodes), nodes);
+            for (i, node) in nodes.into_iter().filter(|node| node.connected).enumerate() {
                 if i != 0 {
                     println!("");
                 }
-                print_node(node);
-            }
-        }
-        [node] => {
-            stream.write(&ClientCommand::FindNode {
-                query: (*node).to_owned(),
-            })?;
-            let resp = stream.read::<ClientResponse>()?;
-            let node = match_strict!(resp, ClientResponse::Node(node), node);
-            print_node(&node);
-        }
-        [node, label @ ..] => {
-            let command = Request::Execute {
-                command_label: label.join(" "),
-                stream: true,
-            };
-
-            if node == &"-" {
-                stream.write(&ClientCommand::ListNodes)?;
-                let resp = stream.read::<ClientResponse>()?;
-                let nodes = match_strict!(resp, ClientResponse::Nodes(nodes), nodes);
-                for (i, node) in nodes.into_iter().filter(|node| node.connected).enumerate() {
-                    if i != 0 {
-                        println!("");
-                    }
-                    exec_command(stream, &node, command.clone())?;
+                match command {
+                    None => print_node(&node),
+                    Some(ref command) => exec_command(stream, &node, command.clone())?,
                 }
-            } else {
-                stream.write(&ClientCommand::FindNode {
-                    query: (*node).to_owned(),
-                })?;
-                let resp = stream.read::<ClientResponse>()?;
-                let node = match_strict!(resp, ClientResponse::Node(node), node);
-                exec_command(stream, &node, command)?;
             }
         }
         _ => Err(anyhow!("Invalid command; Use 'secmon help' for help"))?,

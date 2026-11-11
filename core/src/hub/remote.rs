@@ -33,6 +33,7 @@ fn node_event(event: NodeEvent) -> NodeUpdate {
 fn handle_new_node(
     address: &SocketAddr,
     hostname: &String,
+    group: &Option<String>,
     hub_state: &HubStateMutex,
 ) -> (u32, Receiver<ChannelPacket>) {
     let mut guard = hub_state.lock().unwrap();
@@ -53,6 +54,7 @@ fn handle_new_node(
         serial: *counter,
         address: address.clone(),
         hostname: hostname.clone(),
+        group: group.clone(),
         sessions: Err(NodeDataError::Initializing),
         wg_peers: Err(NodeDataError::Initializing),
         last_state_update: UNIX_EPOCH,
@@ -94,6 +96,7 @@ fn update_hub_state(
     serial: u32,
     address: &SocketAddr,
     hostname: &String,
+    group: &Option<String>,
     data: NodeUpdate,
     hub_state: &HubStateMutex,
 ) -> Option<(u32, Receiver<ChannelPacket>)> {
@@ -138,7 +141,7 @@ fn update_hub_state(
     } else {
         eprintln!("{address} ({hostname}) is not a recognized node");
         drop(guard); // unlock mutex before trying to lock it again
-        Some(handle_new_node(address, hostname, hub_state))
+        Some(handle_new_node(address, hostname, group, hub_state))
     }
 }
 
@@ -165,6 +168,7 @@ fn thread_main(stream: TcpStream, hub_state: &HubStateMutex) -> Result<()> {
     let cmd_receiver;
     let address = stream.peer_addr().unwrap();
     let hostname;
+    let group;
 
     // set timeout to 3 keepalives
     // i.e. if we miss 3 consecutive keepalives, we kill the connection
@@ -251,9 +255,11 @@ fn thread_main(stream: TcpStream, hub_state: &HubStateMutex) -> Result<()> {
     // receive hostname on connect
     if let Response::Connect {
         hostname: node_hostname,
+        group: node_group,
     } = stream.read::<Response>()?
     {
         hostname = node_hostname;
+        group = node_group;
 
         if let Some(wanted) = wanted_hostname
             && wanted != hostname
@@ -263,13 +269,20 @@ fn thread_main(stream: TcpStream, hub_state: &HubStateMutex) -> Result<()> {
             ));
         }
 
-        (serial, cmd_receiver) = handle_new_node(&address, &hostname, hub_state);
+        (serial, cmd_receiver) = handle_new_node(&address, &hostname, &group, hub_state);
         broadcast_update(
             serial,
             &node_event(NodeEvent::Connect(hostname.clone())),
             &hub_state,
         );
-        println!("{address} ({hostname}) connected and was assigned serial {serial}");
+        match group {
+            None => println!("{address} ({hostname}) connected and was assigned serial {serial}"),
+            Some(ref group) => {
+                println!(
+                    "{address} ({hostname}:{group}) connected and was assigned serial {serial}"
+                )
+            }
+        }
     } else {
         return Err(anyhow::anyhow!(
             "Invalid initial response: Should be Response::Connect"
@@ -279,6 +292,7 @@ fn thread_main(stream: TcpStream, hub_state: &HubStateMutex) -> Result<()> {
     // ack with node hostname to confirm connection establishment
     stream.write(&Response::Connect {
         hostname: hostname.clone(),
+        group: group.clone(),
     })?;
 
     thread::scope(|s| {
@@ -343,12 +357,12 @@ fn thread_main(stream: TcpStream, hub_state: &HubStateMutex) -> Result<()> {
                     Response::KeepAlive => {
                         let data = node_event(NodeEvent::KeepAlive);
                         broadcast_update(serial, &data, &hub_state);
-                        update_hub_state(serial, &address, &hostname, data, &hub_state);
+                        update_hub_state(serial, &address, &hostname, &group, data, &hub_state);
                     }
                     Response::Connect { .. } => {} // should not occur
                     Response::NodeUpdate(data) => {
                         broadcast_update(serial, &data, &hub_state);
-                        update_hub_state(serial, &address, &hostname, data, &hub_state);
+                        update_hub_state(serial, &address, &hostname, &group, data, &hub_state);
                     }
                     response @ _ => {
                         // broadcast other response directly

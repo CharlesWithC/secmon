@@ -144,6 +144,14 @@ pub struct NodeConfig {
     /// Note: hostname should not start with '-' to avoid conflicting with command line arguments.
     pub hostname: String,
 
+    /// Optional group name.
+    ///
+    /// If empty or not set, no group is set.
+    ///
+    /// Note: group name should not start with '-' to avoid conflicting with command line arguments.
+    #[serde(deserialize_with = "empty_as_none")]
+    pub group: Option<String>,
+
     /// Resources to monitor.
     ///
     /// Accepted resources: "who", "wg", "auth".
@@ -171,6 +179,7 @@ impl Default for NodeConfig {
             hub_port: DEFAULT_PORT,
             reconnect: true,
             hostname: gethostname().to_string_lossy().into_owned(),
+            group: None,
             resources: Vec::new(),
             command_execute_timeout: 0,
             command_allowlist: BTreeMap::new(),
@@ -231,6 +240,15 @@ impl Default for ClientConfig {
             node_wait_timeout: 0,
         }
     }
+}
+
+/// Helper function to deserialize empty string as `None`.
+fn empty_as_none<'de, D>(d: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s = Option::<String>::deserialize(d)?;
+    Ok(s.filter(|s| !s.is_empty()))
 }
 
 /// Helper function to deserialize {k: v} btree as {v: k}.

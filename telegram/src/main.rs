@@ -79,7 +79,11 @@ fn thread_node_update(send_message: &impl Fn(Option<String>)) -> Result<()> {
                         node_serial: serial,
                         data,
                     } => {
-                        let node = utils::find_node(serial.to_string())?;
+                        let nodes = utils::find_nodes(serial.to_string())?;
+                        let node = nodes
+                            .iter()
+                            .find(|node| node.serial == serial)
+                            .ok_or_else(|| anyhow!("Unable to identify node by serial {serial}"))?;
                         send_message(parser::parse_node_update(&node, &data));
                     }
                     _ => Err(anyhow!("Hub sent a response that is not NodeUpdate"))?, // should not happen
@@ -98,16 +102,14 @@ fn handle_message(
     message: String,
 ) -> Result<()> {
     match message.split_whitespace().collect::<Vec<_>>().as_slice() {
-        ["list"] | ["-"] => {
-            let mut nodes = utils::list_nodes()?;
-            nodes.sort_by(|a, b| a.hostname.cmp(&b.hostname));
+        [query @ ("list" | "-" | _)] => {
+            let nodes = match *query {
+                "list" | "-" => utils::list_nodes()?,
+                query @ _ => utils::find_nodes((*query).to_owned())?,
+            };
             send_message(parser::parse_node_list(tz, &nodes));
         }
-        [node] => {
-            let node = utils::find_node((*node).to_owned())?;
-            send_message(Some(parser::parse_node(tz, &node)));
-        }
-        [node, label @ ..] => {
+        [query @ ("-" | _), label @ ..] => {
             if !enable_exec {
                 send_message(Some(format!("Remote command execution is not enabled")));
                 return Ok(());
@@ -138,22 +140,18 @@ fn handle_message(
                                     stream: false,
                                 };
 
-                                if node == &"-" {
-                                    let nodes = utils::list_nodes()?;
-
-                                    for (i, node) in
-                                        nodes.into_iter().filter(|node| node.connected).enumerate()
-                                    {
-                                        if i != 0 {
-                                            println!("");
-                                        }
-
-                                        let result = utils::raw_command(&node, command.clone(), 0)?;
-                                        send_message(Some(parser::parse_result(&node, &result)));
+                                let nodes = match *query {
+                                    "list" | "-" => utils::list_nodes()?,
+                                    query @ _ => utils::find_nodes((*query).to_owned())?,
+                                };
+                                for (i, node) in
+                                    nodes.into_iter().filter(|node| node.connected).enumerate()
+                                {
+                                    if i != 0 {
+                                        println!("");
                                     }
-                                } else {
-                                    let node = utils::find_node((*node).to_owned())?;
-                                    let result = utils::raw_command(&node, command, 0)?;
+
+                                    let result = utils::raw_command(&node, command.clone(), 0)?;
                                     send_message(Some(parser::parse_result(&node, &result)));
                                 }
 

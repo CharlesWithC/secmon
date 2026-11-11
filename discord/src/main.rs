@@ -68,17 +68,26 @@ fn main() {
                     loop {
                         let resp = stream.read::<ClientResponse>()?;
                         match resp {
-                            ClientResponse::NodeUpdate { node_serial: serial, data } => {
-                                let node = utils::find_node(serial.to_string())?;
-                                if let Some(embed) = parser::parse_node_update(&node, &data) {
-                                    send_webhook(
-                                        &webhook,
-                                        &Webhook {
-                                            content: content.clone(),
-                                            embeds: vec![embed],
-                                        },
-                                    );
-                                }
+                            ClientResponse::NodeUpdate {
+                                node_serial: serial,
+                                data,
+                            } => {
+                                let nodes = utils::find_nodes(serial.to_string())?;
+                                match nodes.iter().find(|node| node.serial == serial) {
+                                    None => eprintln!("Unable to identify node by serial {serial}"),
+                                    Some(node) => {
+                                        if let Some(embed) = parser::parse_node_update(&node, &data)
+                                        {
+                                            send_webhook(
+                                                &webhook,
+                                                &Webhook {
+                                                    content: content.clone(),
+                                                    embeds: vec![embed],
+                                                },
+                                            );
+                                        }
+                                    }
+                                };
                             }
                             _ => eprintln!("Hub sent a response that is not NodeUpdate"),
                         }

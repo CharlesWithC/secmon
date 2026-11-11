@@ -7,27 +7,39 @@ use std::time::SystemTime;
 
 use crate::config::VERBOSE;
 use crate::vprintln;
-use secmon::models::hub::{ClientCommand, ClientResponse, HubStateMutex};
+use secmon::models::hub::{ClientCommand, ClientResponse, HubStateMutex, Node};
 use secmon::models::node::NodeUpdate;
 use secmon::models::packet::{Request, Response};
 use secmon::traits::iosered::IOSerialized;
 
-/// Returns the result of finding a node based on a string-based query.
-fn find_node(query: String, hub_state: &HubStateMutex) -> ClientResponse {
+/// Returns the result of finding nodes based on a query string.
+///
+/// If `query` matches some group, then return all nodes in the group.
+///
+/// Otherwise, return nodes that match serial, address, or hostname.
+fn find_nodes(query: String, hub_state: &HubStateMutex) -> ClientResponse {
     let guard = hub_state.lock().unwrap();
     let (_, ref nodes, _) = *guard;
-    nodes
+
+    let has_group = nodes
         .iter()
-        .find(|(node, _)| {
-            // query based on serial, hostname, address
-            node.serial.to_string() == query
-                || node.hostname == query
-                || node.address.to_string().split(":").next() == Some(&query)
-        })
-        .map(|(node, _)| ClientResponse::Node(node.clone()))
-        .unwrap_or(ClientResponse::Error(format!(
-            "Unable to identify node with '{query}'"
-        )))
+        .any(|(node, _)| node.group.as_ref() == Some(&query));
+
+    ClientResponse::Nodes(
+        nodes
+            .iter()
+            .map(|(node, _)| node)
+            .filter(|node| match has_group {
+                true => node.group.as_ref() == Some(&query),
+                false => {
+                    node.serial.to_string() == query
+                        || node.address.to_string().split(":").next() == Some(&query)
+                        || node.hostname == query
+                }
+            })
+            .cloned()
+            .collect::<Vec<Node>>(),
+    )
 }
 
 /// Handles forwarding a raw command to a given node, and relaying the node's response.
@@ -109,8 +121,8 @@ fn thread_main(mut stream: UnixStream, hub_state: HubStateMutex) -> Result<()> {
                 drop(guard);
                 stream.write(&nodes)?;
             }
-            ClientCommand::FindNode { query } => {
-                let resp = find_node(query, &hub_state);
+            ClientCommand::FindNodes { query } => {
+                let resp = find_nodes(query, &hub_state);
                 stream.write(&resp)?;
             }
             ClientCommand::RawCommand {

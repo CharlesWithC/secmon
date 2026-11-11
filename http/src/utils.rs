@@ -21,15 +21,6 @@ macro_rules! match_response {
     };
 }
 
-/// Returns whether a client-hub request would result in streamed response.
-pub fn is_streaming_command(command: &Request) -> bool {
-    // we don't use catch-all to ensure this method is updated when a new response is added
-    match command {
-        Request::Execute { stream: true, .. } => true,
-        Request::Execute { stream: false, .. } | Request::NodeState => false,
-    }
-}
-
 /// Executes a command on hub and returns the response.
 pub fn execute_command(command: &ClientCommand, expires_in: u64) -> Result<ClientResponse> {
     match UnixStream::connect(get_socket_path()) {
@@ -48,11 +39,11 @@ pub fn execute_command(command: &ClientCommand, expires_in: u64) -> Result<Clien
     }
 }
 
-/// Returns result of finding a node.
-pub fn find_node(query: String) -> Result<Node> {
-    let resp = execute_command(&ClientCommand::FindNode { query }, 0)?;
-    let node = match_response!("find node", resp, ClientResponse::Node(node), node)?;
-    Ok(node)
+/// Returns result of finding nodes based on query.
+pub fn find_nodes(query: String) -> Result<Vec<Node>> {
+    let resp = execute_command(&ClientCommand::FindNodes { query }, 0)?;
+    let nodes = match_response!("find nodes", resp, ClientResponse::Nodes(nodes), nodes)?;
+    Ok(nodes)
 }
 
 /// Returns all nodes connected to hub.

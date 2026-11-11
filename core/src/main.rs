@@ -22,11 +22,14 @@ const USAGE: &str = "Usage:
 Utility commands:
   secmon genkey <pair|psk>          generate keypair or preshared key
   secmon subscribe                  subscribe to node state atomic updates
-  secmon <list|->                   list all recently connected nodes
-  secmon <node>                     show info about a recently connected node
-  secmon <node> <command-label>     execute an allowed command
+  secmon <list|->                   print info of all nodes
+  secmon <node>                     print info of one node
+  secmon <node|-> <command-label>   execute a command on one node or all nodes
+  secmon <group>                    print info of all nodes in group
+  secmon <group> <command-label>    execute a command on all nodes in group
 
-  <node> can be serial, address, hostname. Use \"-\" for all connected nodes.
+  <node> can be serial, address, hostname. \"-\" refers to all connected nodes.
+  <group> takes precedence if individual <node> can be identified by group name.
   Due to sync design, each node can only handle one command at a time.
 
 Options:

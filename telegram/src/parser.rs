@@ -90,10 +90,16 @@ pub fn parse_node(tz: &Tz, node: &Node) -> String {
         true => "✅",
         false => "❌",
     };
-    ret += format!(
-        "{connected} <b>{}</b> (<code>{}</code>)\n",
-        node.hostname, node.address
-    )
+    ret += match node.group {
+        None => format!(
+            "{connected} <b>{}</b> (<code>{}</code>)\n",
+            node.hostname, node.address
+        ),
+        Some(ref group) => format!(
+            "{connected} <b>{}</b> <code>{}</code> (<code>{}</code>)\n",
+            node.hostname, group, node.address
+        ),
+    }
     .as_str();
 
     macro_rules! format_err {

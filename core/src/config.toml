@@ -43,6 +43,11 @@ reconnect = true
 # should not start with '-' which can conflict with command line options
 hostname = ""
 
+# optional group name; if left empty, no group is set
+# this is used by client to group nodes, such as to execute commands
+# should not start with '-' which can conflict with command line options
+group = ""
+
 # resources to monitor and report
 # who = active login sessions
 # wg = active wireguard sessions

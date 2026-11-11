@@ -31,7 +31,7 @@ impl fmt::Display for Request {
             } => {
                 write!(
                     f,
-                    "Request::Execute(command_label=\"{command_label}\", stream={stream})",
+                    "Request::Execute(command_label={command_label:?}, stream={stream})",
                 )
             }
         }
@@ -47,7 +47,9 @@ pub enum Response {
     /// Connection successful
     ///
     /// This response is only sent once on connection establishment.
-    Connect { hostname: String },
+    ///
+    /// If a node should update its hostname or group, it shall reconnect with new identity.
+    Connect { hostname: String, group: Option<String> },
 
     /// Full node state of all stored data
     ///
@@ -99,7 +101,7 @@ impl fmt::Display for Response {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::KeepAlive => write!(f, "Response::KeepAlive"),
-            Self::Connect { hostname } => write!(f, "Response::Connect(hostname=\"{hostname}\")"),
+            Self::Connect { hostname, group } => write!(f, "Response::Connect(hostname={hostname:?}, group={group:?})"),
             Self::NodeState(node_state) => write!(f, "Response::{node_state}",),
             Self::NodeUpdate(update) => write!(f, "Response::{update}",),
             Self::Result { status, output } => write!(

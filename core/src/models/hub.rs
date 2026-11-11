@@ -46,6 +46,8 @@ pub struct Node {
     pub address: SocketAddr,
     /// Hostname of node
     pub hostname: String,
+    /// Group of node
+    pub group: Option<String>,
     /// User sessions collected by node
     pub sessions: Sessions,
     /// WireGuard peers collected by node
@@ -67,9 +69,10 @@ impl fmt::Display for Node {
         let last_keepalive_dt: DateTime<Utc> = self.last_keepalive.into();
         write!(
             f,
-            "Node(serial={}, hostname={:?}, address={:?}, sessions[{}], wg_peers[{}], last_update={:?}, last_keepalive={:?})",
+            "Node(serial={}, hostname={:?}, group={:?}, address={:?}, sessions[{}], wg_peers[{}], last_update={:?}, last_keepalive={:?})",
             self.serial,
             self.hostname,
+            self.group,
             self.address,
             get_display_len(&self.sessions),
             get_display_len(&self.wg_peers),
@@ -91,8 +94,8 @@ pub enum ClientCommand {
     /// List all recently connected nodes
     ListNodes,
 
-    /// Finds the first node matching serial, address or hostname
-    FindNode { query: String },
+    /// Finds a list of nodes based on query string
+    FindNodes { query: String },
 
     /// Raw command to be directly relayed to node
     RawCommand {
@@ -107,8 +110,8 @@ impl fmt::Display for ClientCommand {
         match self {
             Self::Subscribe => write!(f, "ClientCommand::Subscribe"),
             Self::ListNodes => write!(f, "ClientCommand::ListNodes"),
-            Self::FindNode { query } => {
-                write!(f, "ClientCommand::FindNode(query=\"{query}\")")
+            Self::FindNodes { query } => {
+                write!(f, "ClientCommand::FindNodes(query={query:?})")
             }
             Self::RawCommand {
                 node_serial,
@@ -131,10 +134,10 @@ pub enum ClientResponse {
     /// Node state update, including tracked but not stored state
     NodeUpdate { node_serial: u32, data: NodeUpdate },
 
-    /// All recently connected nodes
+    /// A list of nodes
     Nodes(Vec<Node>),
 
-    /// Single recently connected node
+    /// A single node
     Node(Node),
 
     /// Raw response directly relayed from node

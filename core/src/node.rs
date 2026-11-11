@@ -99,14 +99,21 @@ pub fn main() -> Result<()> {
             }
 
             // respond hostname on new connection
+            let NodeConfig {
+                hostname, group, ..
+            } = node_config;
             stream.write(&Response::Connect {
-                hostname: node_config.hostname.clone(),
+                hostname: hostname.clone(),
+                group: group.clone(),
             })?;
 
             // confirm acknowledgement of connection
             // this is necessary because noise protocol may silently fail a connection
             match stream.read::<Response>()? {
-                Response::Connect { hostname } if hostname == node_config.hostname.clone() => {
+                Response::Connect {
+                    hostname: echo_hostname,
+                    group: echo_group,
+                } if *hostname == echo_hostname && *group == echo_group => {
                     println!("Connected to hub {ip}:{port}");
 
                     last_connect_successful = true;

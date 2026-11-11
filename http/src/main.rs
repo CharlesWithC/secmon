@@ -14,8 +14,7 @@ use secmon::utils::{get_env_var_strict, get_socket_path};
 
 mod models;
 mod routes;
-mod utils;
-use crate::models::{DEFAULT_IP, DEFAULT_PORT, BodyNodeUpdate};
+use crate::models::{BodyNodeUpdate, DEFAULT_IP, DEFAULT_PORT};
 
 const USAGE: &str = "Usage:
   secmon-http                       launch http server
@@ -57,7 +56,7 @@ async fn handle_subscribe(
             match upd_r.recv().await {
                 Ok(update) => match serde_json::to_string(&update) {
                     Ok(update_json) => match session.text(update_json).await {
-                        Ok(..) => {} // all good, keep going
+                        Ok(..) => {}     // all good, keep going
                         Err(_) => break, // connection closed, break
                     },
                     Err(e) => {
@@ -116,8 +115,7 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::clone(&upd_s_d))
             .route("/subscribe", web::get().to(handle_subscribe))
             .service(routes::get_list)
-            .service(routes::post_execute)
-            .service(routes::get_node)
+            .service(routes::get_nodes)
     })
     .bind((ip, port))?
     .run()
