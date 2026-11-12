@@ -4,7 +4,7 @@ use std::os::unix::net::{UnixListener, UnixStream};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-use crate::config::{CONFIG, HubConfig, get_config};
+use secmon::config::{CONFIG, HubConfig, get_config};
 use secmon::models::hub::{HubNodes, HubStateMutex, SubscribedClients};
 
 mod client;

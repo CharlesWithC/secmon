@@ -5,12 +5,11 @@ use std::sync::Arc;
 use std::thread;
 use std::time::SystemTime;
 
-use crate::config::VERBOSE;
-use crate::vprintln;
 use secmon::models::hub::{ClientCommand, ClientResponse, HubStateMutex, Node};
 use secmon::models::node::NodeUpdate;
 use secmon::models::packet::{Request, Response};
 use secmon::traits::iosered::IOSerialized;
+use secmon::utils::vprintln;
 
 /// Returns the result of finding nodes based on a query string.
 ///

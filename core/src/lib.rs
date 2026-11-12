@@ -8,4 +8,6 @@ pub mod traits {
     pub mod iosered;
     pub mod tryclone;
 }
+pub mod config;
+pub mod crypto;
 pub mod utils;

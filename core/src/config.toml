@@ -78,3 +78,23 @@ reboot = "shutdown -r"
 [client]
 # time to wait when node is executing a command, before aborting execution
 node_wait_timeout = 30                  # in seconds; use 0 to disable
+
+# 'node_order_key', 'node_order_override', 'group_order_override' are used to
+# sort nodes for display and command execution; the high-level mechanism is
+# group override > group (string order) > node override > node (key order)
+
+# key to order nodes, choose from: serial, address, hostname
+# note: group takes precedence in ordering, i.e. nodes are sorted by group
+# first, then by the key below; string order is used for address and hostname
+node_order_key = "hostname"
+
+# ordered list of node hostnames to override default node order
+# if set, nodes are ordered based on indices of hostnames; nodes not
+# in list are placed after nodes in list, sorted by 'node_order_key'
+# note: node order is relative; group order still takes precedence
+node_order_override = ["node_3", "node_2", "node_1"]
+
+# ordered list of groups to override default group order
+# if set, groups are ordered based on indices of group names; groups not
+# in list are placed after groups in list, sorted by string order
+group_order_override = ["group_3", "group_2", "group_1"]

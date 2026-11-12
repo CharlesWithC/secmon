@@ -5,12 +5,12 @@ use colored::Colorize;
 use std::os::unix::net::UnixStream;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use crate::config::{CONFIG, get_config};
-use crate::{VERBOSE, vprintln};
+use secmon::config::{CONFIG, get_config};
 use secmon::models::hub::{ClientCommand, ClientResponse, Node};
 use secmon::models::node::NodeDataError;
 use secmon::models::packet::{Request, Response, ResultStatus};
 use secmon::traits::iosered::IOSerialized;
+use secmon::utils::vprintln;
 
 macro_rules! match_strict {
     ( $response:expr, $pattern:pat, $return:expr ) => {
@@ -225,7 +225,8 @@ pub fn main(command: String, stream: &mut UnixStream) -> Result<()> {
             };
 
             let resp = stream.read::<ClientResponse>()?;
-            let nodes = match_strict!(resp, ClientResponse::Nodes(nodes), nodes);
+            let mut nodes = match_strict!(resp, ClientResponse::Nodes(nodes), nodes);
+            secmon::utils::sort_nodes(&mut nodes, get_config!(client));
             for (i, node) in nodes.into_iter().filter(|node| node.connected).enumerate() {
                 if i != 0 {
                     println!("");

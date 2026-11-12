@@ -1,4 +1,5 @@
 use crossbeam_channel::Receiver;
+use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::Path;
@@ -8,7 +9,22 @@ use std::time::Duration;
 use std::{env, process};
 use users::get_current_uid;
 
+use crate::config::{ClientConfig, NodeOrderKey};
+use crate::models::hub::Node;
 use crate::models::packet::{Response, ResultStatus};
+
+/// `println!` wrapper for verbose mode.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __vprintln {
+    ($($arg:tt)*) => {
+        // note: VERBOSE is not set if -v/--verbose is not passed
+        if *secmon::config::VERBOSE.get().unwrap_or(&false) {
+            println!($($arg)*);
+        }
+    };
+}
+pub use crate::__vprintln as vprintln;
 
 /// Returns the length for display for a `Result<Vec<_>>` value.
 ///
@@ -111,5 +127,47 @@ where
             Ok(_) => callback_success(), // success if anything is received
             Err(_) => callback_fail(), // disconnect (rx is dropped) or timeout (deadline is reached)
         }
+    });
+}
+
+/// Sort nodes in place based on client config.
+pub fn sort_nodes(nodes: &mut Vec<Node>, config: &ClientConfig) -> () {
+    let cmp_group_base = |a: &Node, b: &Node| -> Ordering { a.group.cmp(&b.group) };
+
+    let cmp_node_key: fn(&Node, &Node) -> Ordering = match config.node_order_key {
+        NodeOrderKey::Serial => |a, b| a.serial.cmp(&b.serial),
+        NodeOrderKey::Address => |a, b| a.address.cmp(&b.address),
+        NodeOrderKey::Hostname => |a, b| a.hostname.cmp(&b.hostname),
+    };
+
+    let node_index_max = config.node_order_override.len();
+    let get_node_index = |x: &Node| -> &usize {
+        config
+            .node_order_override
+            .get(&x.hostname)
+            .unwrap_or(&node_index_max)
+    };
+    let cmp_node_override =
+        |a: &Node, b: &Node| -> Ordering { get_node_index(a).cmp(get_node_index(b)) };
+
+    let group_index_max = config.group_order_override.len();
+    let get_group_index = |x: &Node| -> &usize {
+        match x.group {
+            Some(ref group) => config
+                .group_order_override
+                .get(group)
+                .unwrap_or(&group_index_max),
+            None => &group_index_max,
+        }
+    };
+    let cmp_group_override =
+        |a: &Node, b: &Node| -> Ordering { get_group_index(a).cmp(get_group_index(b)) };
+
+    nodes.sort_by(|a, b| {
+        Ordering::Equal
+            .then_with(|| cmp_group_override(a, b))
+            .then_with(|| cmp_group_base(a, b))
+            .then_with(|| cmp_node_override(a, b))
+            .then_with(|| cmp_node_key(a, b))
     });
 }

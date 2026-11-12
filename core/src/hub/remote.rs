@@ -5,8 +5,8 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use crate::config::{CONFIG, get_config};
-use crate::crypto::{
+use secmon::config::{CONFIG, get_config};
+use secmon::crypto::{
     Key, NOISE_HANDSHAKE_MAXLEN, NOISE_HANDSHAKE_MAXTIME, NOISE_MAXLEN, NOISE_PATTERN, NoiseShared,
     NoisyStream,
 };

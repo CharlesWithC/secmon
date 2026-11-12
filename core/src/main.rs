@@ -6,13 +6,11 @@ use std::fs;
 use std::path::Path;
 use std::{env, process};
 
-mod config;
-mod crypto;
 mod hub;
 mod node;
-use crate::config::{CONFIG, Config, VERBOSE, get_config};
-use crate::crypto::{Key, NOISE_KEYLEN, NOISE_PATTERN};
-use secmon::utils::{get_env_var, get_socket_path};
+use secmon::config::{CONFIG, Config, VERBOSE, get_config};
+use secmon::crypto::{Key, NOISE_KEYLEN, NOISE_PATTERN};
+use secmon::utils::{get_env_var, get_socket_path, vprintln};
 
 const USAGE: &str = "Usage:
   secmon hub                        launch hub daemon

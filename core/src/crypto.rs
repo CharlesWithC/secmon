@@ -6,8 +6,8 @@ use std::io;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use secmon::traits::iosered::IOSerialized;
-use secmon::traits::tryclone::TryClone;
+use crate::traits::iosered::IOSerialized;
+use crate::traits::tryclone::TryClone;
 
 /// Noise protocol. XKpsk0 requires 1.5 RTT for handshake.
 ///

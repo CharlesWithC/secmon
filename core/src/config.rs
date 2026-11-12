@@ -14,17 +14,6 @@ pub static CONFIG: OnceLock<Config> = OnceLock::new();
 const DEFAULT_IP: IpAddr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
 const DEFAULT_PORT: u16 = 9992;
 
-/// `println!` wrapper for verbose mode.
-#[macro_export]
-macro_rules! vprintln {
-    ($($arg:tt)*) => {
-        // note: VERBOSE is not set if -v/--verbose is not passed
-        if *VERBOSE.get().unwrap_or(&false) {
-            println!($($arg)*);
-        }
-    };
-}
-
 /// Macro for getting hub/node/client config.
 #[doc(hidden)]
 #[macro_export]
@@ -232,12 +221,47 @@ impl Default for NodeNoise {
 pub struct ClientConfig {
     /// Time (in seconds) to wait when node is executing a command, before aborting execution. Use 0 to disable.
     pub node_wait_timeout: u64,
+
+    /// Key to order nodes, choose from: serial, address, hostname.
+    ///
+    /// Note: group takes precedence in ordering, i.e. nodes are sorted by group first, then by the key below;
+    /// string order is used for address and hostname.
+    pub node_order_key: NodeOrderKey,
+
+    /// List of node hostnames to override node order.
+    ///
+    /// Deserialized as a dictionary of `{hostname: index}` for efficient sorting.
+    ///
+    /// Nodes in list will have fixed order, and nodes not in list will be placed after nodes in list,
+    /// sorted by 'node_order_key'.
+    #[serde(deserialize_with = "list_to_btree")]
+    pub node_order_override: BTreeMap<String, usize>,
+
+    /// List of groups to override group order.
+    ///
+    /// Deserialized as a dictionary of `{group: index}` for efficient sorting.
+    ///
+    /// Groups in list will have fixed order, and groups not in list will be placed after groups in list,
+    /// sorted by string order.
+    #[serde(deserialize_with = "list_to_btree")]
+    pub group_order_override: BTreeMap<String, usize>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum NodeOrderKey {
+    Serial,
+    Address,
+    Hostname,
 }
 
 impl Default for ClientConfig {
     fn default() -> Self {
         Self {
             node_wait_timeout: 0,
+            node_order_key: NodeOrderKey::Hostname,
+            node_order_override: BTreeMap::new(),
+            group_order_override: BTreeMap::new(),
         }
     }
 }
@@ -262,4 +286,20 @@ where
         .into_iter()
         .map(|(v, k)| (k, v))
         .collect())
+}
+
+/// Helper function to deserailize [v] list as {v: idx} btree.
+///
+/// Note: Only first entry is taken for duplicate entries.
+fn list_to_btree<'de, D, V>(deserializer: D) -> Result<BTreeMap<V, usize>, D::Error>
+where
+    D: Deserializer<'de>,
+    V: Deserialize<'de> + Ord,
+{
+    let l = Vec::<V>::deserialize(deserializer)?;
+    let mut map = BTreeMap::new();
+    for (idx, v) in l.into_iter().enumerate() {
+        map.entry(v).or_insert(idx);
+    }
+    Ok(map)
 }

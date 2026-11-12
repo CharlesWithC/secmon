@@ -7,8 +7,8 @@ use std::time::{Duration, SystemTime};
 
 mod data;
 mod handler;
-use crate::config::{CONFIG, NodeConfig, get_config};
-use crate::crypto::{
+use secmon::config::{CONFIG, NodeConfig, get_config};
+use secmon::crypto::{
     NOISE_HANDSHAKE_MAXLEN, NOISE_HANDSHAKE_MAXTIME, NOISE_MAXLEN, NOISE_PATTERN, NoiseShared,
     NoisyStream,
 };

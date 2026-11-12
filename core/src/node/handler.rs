@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
-use crate::config::{CONFIG, get_config};
+use secmon::config::{CONFIG, get_config};
 use secmon::models::node::{NodeDataError, NodeStateMutex, NodeUpdate};
 use secmon::models::packet::{Request, Response, ResultStatus};
 use secmon::traits::exec::{ChildWait, CommandExec, ExecResult};
