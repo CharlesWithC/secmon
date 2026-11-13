@@ -1863,7 +1863,7 @@ dependencies = [
 
 [[package]]
 name = "secmon-dc"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "const_format",
@@ -1876,7 +1876,7 @@ dependencies = [
 
 [[package]]
 name = "secmon-http"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "actix-web",
  "actix-ws",
@@ -1890,7 +1890,7 @@ dependencies = [
 
 [[package]]
 name = "secmon-tg"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "chrono",

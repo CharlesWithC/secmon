@@ -1,0 +1,132 @@
+# secmon complete sample config file
+# [hub] section is used when launching `secmon hub`
+# [node] section is used when launching `secmon node`
+# [client] section is used when using utility commands
+# [http] section is used by `secmon-http`
+# [discord] section is used by `secmon-dc`
+# [telegram] section is used by `secmon-tg`
+
+# ============================================================
+[hub]
+bind_ip = "127.0.0.1"
+bind_port = 9992
+
+# time before a disconnected node is removed, if not replaced
+disconnect_grace_period = 300           # in seconds
+
+# replace a disconnected node if it reconnects with the same hostname
+# otherwise treat all new connections as new nodes
+assume_hostname_unique = true
+
+# noise protocol configuration for hub
+[hub.noise]
+enable = false                          # if false, then plaintext tcp is used
+
+private_key = ""                        # 32-bit private key for hub
+preshared_key = ""                      # optional; 32-bit global preshared key
+
+# whether to whitelist nodes
+# if true, then node public keys must be set in hub.noise.node_whitelist
+# if false, then any node may connect to the hub
+use_whitelist = true
+
+# node hostname-publickey pairs
+[hub.noise.node_whitelist]
+hostname="public-key"
+
+# ============================================================
+[node]
+hub_ip = "127.0.0.1"
+hub_port = 9992
+
+# if disconnected from hub, whether to automatically reconnect
+reconnect = true
+
+# optional custom hostname; if left empty, system hostname is used
+# should not start with '-' which can conflict with command line options
+hostname = ""
+
+# optional group name; if left empty, no group is set
+# this is used by client to group nodes, such as to execute commands
+# should not start with '-' which can conflict with command line options
+group = ""
+
+# resources to monitor and report
+# who = active login sessions
+# wg = active wireguard sessions
+# auth = ssh and su activity
+resources = ["who", "wg", "auth"]
+
+# time to wait when executing a command, before killing the child process
+command_execute_timeout = 30            # in seconds; use 0 to disable
+
+# noise protocol configuration for node
+[node.noise]
+enable = false
+
+private_key = ""                        # 32-bit private key for node
+hub_public_key = ""                     # 32-bit public key from hub
+
+preshared_key = ""                      # optional; 32-bit global preshared key
+
+# label-command pairs for whitelisted commands
+# label should not start with '-' which can conflict with command line options
+# command output should be smaller than 63.98MB, otherwise might cause panic
+# (for non-streamed output; size set by `NOISE_MAX_CHUNK` in `crypto.rs`)
+[node.command_allowlist]
+update = "apt update -y"
+reboot = "shutdown -r"
+
+# ============================================================
+[client]
+# time to wait when node is executing a command, before aborting execution
+node_wait_timeout = 30                  # in seconds; use 0 to disable
+
+# 'node_order_key', 'node_order_override', 'group_order_override' are used to
+# sort nodes for display and command execution; the high-level mechanism is
+# group override > group (string order) > node override > node (key order)
+
+# key to order nodes, choose from: serial, address, hostname
+# note: group takes precedence in ordering, i.e. nodes are sorted by group
+# first, then by the key below; string order is used for address and hostname
+node_order_key = "hostname"
+
+# ordered list of node hostnames to override default node order
+# if set, nodes are ordered based on indices of hostnames; nodes not
+# in list are placed after nodes in list, sorted by 'node_order_key'
+# note: node order is relative; group order still takes precedence
+node_order_override = ["node_3", "node_2", "node_1"]
+
+# ordered list of groups to override default group order
+# if set, groups are ordered based on indices of group names; groups not
+# in list are placed after groups in list, sorted by string order
+group_order_override = ["group_3", "group_2", "group_1"]
+
+# ============================================================
+[http]
+bind_ip = "127.0.0.1"
+bind_port = 9993
+
+# ============================================================
+[discord]
+webhook = "" # required webhook url
+message = "" # optional message content
+
+# ============================================================
+[telegram]
+token = "" # required bot token
+
+# id of telegram user to accept commands from and send updates to
+user_id = 1234
+
+# list of command labels that may be executed through the bot
+# the labels should match the ones in node command allowlist
+command_allowlist = ["update", "reboot"]
+
+# timezone for date time in messages
+# default: system timezone, or fall back to UTC
+timezone = ""
+
+# whether to disable ipv6 when communicating with telegram api
+# note: ipv6 connection may timeout; enable this if that happens
+ipv4_only = false
