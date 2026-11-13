@@ -1,0 +1,7 @@
+# secmon-dc sample config file
+# the following can be appended to the main config file
+
+# ============================================================
+[discord]
+webhook = "" # required webhook url
+message = "" # optional message content

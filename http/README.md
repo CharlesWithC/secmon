@@ -10,7 +10,7 @@ This package also exports client util functions for telegram and discord integra
 
 Start http server with `secmon-http`.
 
-The server binds to `127.0.0.1:9993` by default, but you may change it with `SERVER_IP` and `SERVER_PORT` environment variables.
+The server binds to `127.0.0.1:9993` by default, but you may change it with configuration file.
 
 Sample requests:
 

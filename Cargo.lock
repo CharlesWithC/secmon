@@ -1866,6 +1866,7 @@ name = "secmon-dc"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "const_format",
  "secmon",
  "secmon-http",
  "serde",

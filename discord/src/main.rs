@@ -5,25 +5,30 @@ use std::process;
 use std::thread;
 use std::time::Duration;
 
+use secmon::GENERIC_OPTIONS;
+use secmon::config::get_config;
 use secmon::models::hub::{ClientCommand, ClientResponse};
 use secmon::traits::iosered::IOSerialized;
-use secmon::utils::{get_env_var_strict, get_socket_path};
+use secmon::utils::{get_socket_path, init_from_generic_args, sanitize_generic_args};
 use secmon_http::utils;
 
+mod config;
 mod models;
 mod parser;
 use models::{Embed, Webhook};
 
+use crate::config::{CONFIG, DiscordConfig};
 use crate::models::EmbedField;
 
-const USAGE: &str = "Usage:
+const USAGE: &str = const_format::formatcp!(
+    "Usage:
   secmon-dc                         launch discord integration
   secmon-dc test                    send a test webhook
   secmon-dc help                    show this help message
 
-Environment:
-  DISCORD_WEBHOOK_URL=<url>         mandatory
-  DISCORD_MESSAGE_CONTENT=<text>    optional; sets message content in webhook";
+Options:
+  {GENERIC_OPTIONS}"
+);
 
 fn send_webhook(uri: &String, body: &Webhook) -> () {
     let result = ureq::post(uri).send_json(body);
@@ -35,17 +40,27 @@ fn send_webhook(uri: &String, body: &Webhook) -> () {
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    if args.len() == 2 && args[1] == "help" {
+    let sanitized_args = sanitize_generic_args(&args);
+    if sanitized_args.len() == 2 && sanitized_args[1] == "help" {
         println!("{USAGE}");
         process::exit(0);
+    } else if sanitized_args.len() != 1 && sanitized_args[1] != "test" {
+        println!("Unrecognized command: {}\n\n{USAGE}", sanitized_args[1]);
+        process::exit(1);
     }
 
-    let webhook = get_env_var_strict::<String>("DISCORD_WEBHOOK_URL", None);
-    let content = get_env_var_strict("DISCORD_MESSAGE_CONTENT", Some(String::from("")));
+    init_from_generic_args(&args, &CONFIG).unwrap_or_else(|e| {
+        eprintln!("{e}");
+        process::exit(1);
+    });
+    let DiscordConfig {
+        webhook,
+        message: content,
+    } = get_config!(discord);
 
-    if args.len() == 2 && args[1] == "test" {
+    if sanitized_args.len() == 2 && sanitized_args[1] == "test" {
         let body = Webhook {
-            content: content,
+            content: content.clone(),
             embeds: vec![Embed {
                 title: "Test Webhook".to_owned(),
                 description: "This is a test webhook.".to_owned(),
@@ -54,11 +69,9 @@ fn main() {
         };
         send_webhook(&webhook, &body);
         process::exit(0);
-    } else if args.len() != 1 {
-        eprintln!("Invalid command; Use 'secmon-dc help' for help");
-        process::exit(1);
     }
 
+    let mut last_error = String::new();
     loop {
         if let Err(e) = || -> Result<()> {
             match UnixStream::connect(get_socket_path()) {
@@ -96,7 +109,11 @@ fn main() {
                 Err(e) => Err(e)?,
             }
         }() {
-            eprintln!("Unable to connect to hub daemon: {e}");
+            let e_str = format!("{e}");
+            if last_error != e_str {
+                println!("Unable to connect to hub daemon: {e_str}");
+                last_error = e_str;
+            }
         }
 
         thread::sleep(Duration::from_millis(100));
