@@ -1,13 +1,15 @@
 use anyhow::{Result, anyhow};
 use chrono_tz::Tz;
 use frankenstein::client_ureq::Bot;
-use frankenstein::methods::{GetUpdatesParams, SendMessageParams};
+use frankenstein::input_file::InputFile;
+use frankenstein::methods::{GetUpdatesParams, SendDocumentParams, SendMessageParams};
 use frankenstein::types::AllowedUpdate;
 use frankenstein::updates::UpdateContent;
 use frankenstein::ureq;
 use frankenstein::{ParseMode, TelegramApi};
 use std::env;
 use std::os::unix::net::UnixStream;
+use std::path::PathBuf;
 use std::process;
 use std::thread;
 use std::time::Duration;
@@ -93,6 +95,7 @@ fn handle_message(
     enable_exec: bool,
     tz: &Tz,
     send_message: &impl Fn(Option<String>),
+    send_document: &impl Fn(Option<String>, PathBuf),
     message: String,
 ) -> Result<()> {
     match message.split_whitespace().collect::<Vec<_>>().as_slice() {
@@ -127,7 +130,13 @@ fn handle_message(
                 };
                 for node in nodes.into_iter().filter(|node| node.connected) {
                     let result = utils::raw_command(&node, command.clone(), 0)?;
-                    send_message(Some(parser::parse_result(&node, &result)));
+
+                    // note: `_tempdir` is dropped automatically when it's out of scope
+                    let (content, _tempdir, file) = parser::parse_result(&node, &result)?;
+                    match file {
+                        None => send_message(Some(content)),
+                        Some(file) => send_document(Some(content), file.into()),
+                    }
                 }
             }
         }
@@ -168,21 +177,37 @@ fn main() {
     let bot = build_bot();
 
     // helper function to send message with `user_id` copied inside
+    // note: if text is `None`, then return directly
     let bot_clone = bot.clone();
     let send_message = move |text: Option<String>| -> () {
         match text {
             None => return,
             Some(text) => {
-                let send_message_params = SendMessageParams::builder()
+                let params = SendMessageParams::builder()
                     .chat_id(*owner_id as i64)
                     .text(text)
                     .parse_mode(ParseMode::Html)
                     .build();
-                let result = bot_clone.send_message(&send_message_params);
+                let result = bot_clone.send_message(&params);
                 if let Err(e) = result {
                     println!("Failed to send message: {e}");
                 }
             }
+        }
+    };
+    // helper function to send file with `user_id` copied inside
+    // note: text refers to caption in message
+    let bot_clone = bot.clone();
+    let send_document = move |text: Option<String>, path: PathBuf| -> () {
+        let params = SendDocumentParams::builder()
+            .chat_id(*owner_id as i64)
+            .maybe_caption(text)
+            .parse_mode(ParseMode::Html)
+            .document(InputFile::from(path))
+            .build();
+        let result = bot_clone.send_document(&params);
+        if let Err(e) = result {
+            println!("Failed to send document: {e}");
         }
     };
 
@@ -240,9 +265,13 @@ fn main() {
                                 }
 
                                 if let Some(message) = message.text {
-                                    if let Err(e) =
-                                        handle_message(enable_exec, &tz, &send_message, message)
-                                    {
+                                    if let Err(e) = handle_message(
+                                        enable_exec,
+                                        &tz,
+                                        &send_message,
+                                        &send_document,
+                                        message,
+                                    ) {
                                         send_message(Some(format!("Error: {e}")));
                                     }
                                 }

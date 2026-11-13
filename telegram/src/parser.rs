@@ -1,5 +1,10 @@
+use anyhow::Result;
 use chrono::{DateTime, Utc};
 use chrono_tz::Tz;
+use std::fs::File;
+use std::io::Write;
+use std::path::PathBuf;
+use tempfile::TempDir;
 
 use secmon::models::hub::Node;
 use secmon::models::node::{AuthLog, AuthLogDetail, NodeDataError, NodeEvent, NodeUpdate};
@@ -196,14 +201,29 @@ pub fn parse_node_list(tz: &Tz, nodes: &Vec<Node>) -> Option<String> {
 }
 
 /// Returns exec result in user-friendly format.
-pub fn parse_result(node: &Node, response: &Response) -> String {
+///
+/// If output is too long (i.e. over 200 characters), it is stored in a temporary file.
+/// `Some(tempdir)` and `Some(path)` are returned to access the file and clean up the directory.
+pub fn parse_result(
+    node: &Node,
+    response: &Response,
+) -> Result<(String, Option<TempDir>, Option<PathBuf>)> {
     match response {
         Response::Result { status, output } => {
             let mut ret = format!("<b>{}</b> (<code>{}</code>)\n", node.hostname, node.address);
+            let mut tempdir: Option<TempDir> = None;
+            let mut path: Option<PathBuf> = None;
 
             let output = match output.as_str().trim() {
                 "" => "<i>No output</i>".to_owned(),
-                _ => format!("\n<code>{output}</code>"),
+                text if text.len() <= 200 => format!("\n<code>{text}</code>"),
+                text => {
+                    // text.len() > 200
+                    tempdir = Some(tempfile::tempdir()?);
+                    path = Some(tempdir.as_ref().unwrap().path().join("output.txt"));
+                    writeln!(File::create(path.as_ref().unwrap())?, "{text}")?;
+                    format!("<i>See attached file</i>")
+                }
             };
 
             match status {
@@ -221,10 +241,12 @@ pub fn parse_result(node: &Node, response: &Response) -> String {
                 }
             }
 
-            ret
+            Ok((ret, tempdir, path))
         }
-        _ => {
-            format!("⚠️ Received unparsable result: {response}")
-        }
+        _ => Ok((
+            format!("⚠️ Received unparsable result: {response}"),
+            None,
+            None,
+        )),
     }
 }

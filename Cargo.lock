@@ -1901,6 +1901,7 @@ dependencies = [
  "secmon",
  "secmon-http",
  "serde",
+ "tempfile",
 ]
 
 [[package]]
