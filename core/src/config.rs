@@ -1,5 +1,5 @@
 use gethostname::gethostname;
-use serde::{Deserialize, Deserializer};
+use serde::{Deserialize, Deserializer, de::Error};
 use std::collections::BTreeMap;
 use std::net::{IpAddr, Ipv4Addr};
 use std::sync::OnceLock;
@@ -28,7 +28,7 @@ macro_rules! __get_config {
 pub use crate::__get_config as get_config;
 
 #[derive(Debug, Deserialize, Default)]
-#[serde(default, deny_unknown_fields)]
+#[serde(default)]
 pub struct Config {
     pub hub: HubConfig,
     pub node: NodeConfig,
@@ -131,6 +131,7 @@ pub struct NodeConfig {
     /// If empty or not set, system hostname is used.
     ///
     /// Note: hostname should not start with '-' to avoid conflicting with command line arguments.
+    #[serde(default = "default_hostname", deserialize_with = "hostname")]
     pub hostname: String,
 
     /// Optional group name.
@@ -155,6 +156,7 @@ pub struct NodeConfig {
     ///
     /// Command output should be smaller than 63.98MB, otherwise transmitting the result might cause a panic.
     /// This is only applicable to non-streamed output, and the size is set by `NOISE_MAX_CHUNK` in `crypto.rs`.
+    #[serde(deserialize_with = "btree_key_no_leading_dash")]
     pub command_allowlist: BTreeMap<String, String>,
 
     /// Noise protocol configuration.
@@ -275,7 +277,7 @@ where
     Ok(s.filter(|s| !s.is_empty()))
 }
 
-/// Helper function to deserialize {k: v} btree as {v: k}.
+/// Helper function to deserialize `{k: v}` btree as `{v: k}`.
 fn inverted_btree<'de, D, K, V>(d: D) -> Result<BTreeMap<K, V>, D::Error>
 where
     D: Deserializer<'de>,
@@ -288,7 +290,7 @@ where
         .collect())
 }
 
-/// Helper function to deserailize [v] list as {v: idx} btree.
+/// Helper function to deserailize `[v]` list as `{v: idx}` btree.
 ///
 /// Note: Only first entry is taken for duplicate entries.
 fn list_to_btree<'de, D, V>(deserializer: D) -> Result<BTreeMap<V, usize>, D::Error>
@@ -302,4 +304,57 @@ where
         map.entry(v).or_insert(idx);
     }
     Ok(map)
+}
+
+/// Helper function to deserialize string that should not have a leading dash.
+///
+/// A deserialization error is raised if the value leads with "-".
+fn no_leading_dash<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    if s.starts_with('-') {
+        return Err(D::Error::custom(format!(
+            "value must not start with '-': {s:?}"
+        )));
+    }
+    Ok(s)
+}
+
+/// Helper function to deserialize `{k: v}` btree where `k` should not have a leading dash.
+fn btree_key_no_leading_dash<'de, D, V>(deserializer: D) -> Result<BTreeMap<String, V>, D::Error>
+where
+    D: Deserializer<'de>,
+    V: Deserialize<'de> + Ord,
+{
+    let map = BTreeMap::<String, V>::deserialize(deserializer)?;
+    for (k, _) in &map {
+        if k.starts_with('-') {
+            return Err(D::Error::custom(format!(
+                "value must not start with '-': {k:?}"
+            )));
+        }
+    }
+    Ok(map)
+}
+
+/// Helper function to get default hostname.
+///
+/// Default hostname is used when hostname is not set or empty.
+fn default_hostname() -> String {
+    gethostname().to_string_lossy().into_owned()
+}
+
+/// Helper function to deseralize hostname.
+///
+/// If hostname is empty, this overwrite it with default hostname.
+///
+/// Note: This does not handle when hostname is not set, which is handled by `default` instead.
+fn hostname<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s = no_leading_dash(deserializer)?;
+    Ok(if s.is_empty() { default_hostname() } else { s })
 }

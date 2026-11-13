@@ -262,7 +262,7 @@ impl fmt::Debug for Key {
         if !self.exists() {
             write!(f, "none")
         } else {
-            write!(f, "redacted")
+            write!(f, "<hidden>")
         }
     }
 }

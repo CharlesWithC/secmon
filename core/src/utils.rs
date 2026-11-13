@@ -1,5 +1,8 @@
+use anyhow::{Result, anyhow, bail};
 use crossbeam_channel::Receiver;
+use serde::de::DeserializeOwned;
 use std::cmp::Ordering;
+use std::fs;
 use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::Path;
@@ -170,4 +173,105 @@ pub fn sort_nodes(nodes: &mut Vec<Node>, config: &ClientConfig) -> () {
             .then_with(|| cmp_node_override(a, b))
             .then_with(|| cmp_node_key(a, b))
     });
+}
+
+/// Returns tuple `(config_path, verbose)` parsed from command line arguments.
+///
+/// If `-c` is set, then `config_path` is `Some(path)`, otherwise `None`.
+///
+/// If `-v` is set, then `verbose` is `true`, otherwise `false`.
+pub fn parse_generic_args(args: &Vec<String>) -> Result<(Option<String>, bool)> {
+    let mut config_path: Option<String> = None;
+    let mut verbose = false;
+
+    let mut it = args.iter();
+    while let Some(arg) = it.next() {
+        if arg == "-c" || arg == "--config" {
+            if !config_path.is_none() {
+                bail!("Duplicate '-c' argument detected. Provide only one config file.");
+            }
+
+            let Some(path) = it.next() else {
+                bail!("Invalid '-c' argument. Provide a config file.");
+            };
+            match Path::new(path).try_exists() {
+                Ok(false) => bail!("Unable to find config file at {path}"),
+                Err(e) => bail!("Unable to read config file at {path}: {e}"),
+                _ => config_path = Some(path.clone()),
+            }
+        }
+        if arg == "-v" || arg == "--verbose" {
+            verbose = true;
+        }
+    }
+
+    Ok((config_path, verbose))
+}
+
+/// Sanitizes generic command line arguments in place.
+///
+/// This removes `-c` and `-v` arguments from `args`.
+///
+/// Note: We assume that `args` is valid, i.e. `-c` is followed by config path.
+pub fn sanitize_generic_args(args: &mut Vec<String>) -> () {
+    let mut args = args.clone();
+    let mut skip_next = false;
+    args.retain(|a| {
+        if std::mem::take(&mut skip_next) {
+            return false; // value belonging to -c/--config
+        }
+        match a.as_str() {
+            "-v" | "--verbose" => false,
+            "-c" | "--config" => {
+                skip_next = true;
+                false
+            }
+            _ => true,
+        }
+    });
+}
+
+/// Returns parsed toml configuration given an optional path.
+///
+/// If `path` is `None`, then try default locations, i.e.
+/// `$XDG_CONFIG_HOME/secmon/config.toml` and `/etc/secmon/config.toml`.
+///
+/// A generic type `T` is used to allow loading different formats of config.
+pub fn read_config<T: DeserializeOwned>(path: Option<String>) -> Result<T> {
+    let mut config_path = path;
+
+    if config_path.is_none() {
+        let mut try_paths: Vec<String> = vec![];
+
+        if let Ok(Some(config_home)) = get_env_var::<String>("XDG_CONFIG_HOME", None)
+            && !config_home.is_empty()
+        {
+            try_paths.push(config_home + "/secmon/config.toml");
+        }
+        if let Ok(Some(home)) = get_env_var::<String>("HOME", None)
+            && !home.is_empty()
+        {
+            try_paths.push(home + "/.config/secmon/config.toml");
+        }
+        try_paths.push("/etc/secmon/config.toml".to_owned());
+
+        for path in try_paths.iter() {
+            // we treat no-access files as invisible so we use naive `exists`
+            if Path::new(path).exists() {
+                config_path = Some(path.clone());
+                break;
+            }
+        }
+    }
+
+    let Some(config_path) = config_path else {
+        bail!("Unable to find a config file. Specify one with '-c' argument.");
+    };
+
+    let config_raw = fs::read_to_string(&config_path)
+        .map_err(|e| anyhow!("Unable to read config file at {config_path}: {e}"))?;
+
+    println!("Using config file at {config_path}");
+
+    toml::from_str::<T>(&config_raw).map_err(|e| anyhow!("Unable to parse config file: {e}"))
 }
