@@ -27,23 +27,25 @@ curl --no-buffer --include \
 # lists all nodes
 curl http://localhost:9993/list
 
-# fetches info about 'fury'
+# queries nodes with "fury"
+# note: query string can be serial, address, hostname, or group
 curl http://localhost:9993/fury
 
-# fetches node state from 'fury'
+# fetches node state from node with serial 1
+# note: serial is required to identify a unique node
 curl -X POST \
      -H "Content-Type: application/json" \
      -d '"NodeState"' \
-     http://localhost:9993/fury/execute
+     http://localhost:9993/1/execute
 
-# executes a raw command on fury
+# executes a raw command on node with serial 1
 # sets a 5 second wait timeout
 # note: streaming response not supported
 curl -X POST \
      -H "Content-Type: application/json" \
      -H "Expires-In: 5" \
      -d '{"Execute": { "command_label": "reboot", "stream": false }}' \
-     http://localhost:9993/fury/execute
+     http://localhost:9993/1/execute
 ```
 
 See `secmon-http help` for detailed information on using the program.

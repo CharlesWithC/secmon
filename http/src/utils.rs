@@ -21,6 +21,15 @@ macro_rules! match_response {
     };
 }
 
+/// Returns whether a client-hub request would result in streamed response.
+pub fn is_streaming_command(command: &Request) -> bool {
+    // we don't use catch-all to ensure this method is updated when a new response is added
+    match command {
+        Request::Execute { stream: true, .. } => true,
+        Request::Execute { stream: false, .. } | Request::NodeState => false,
+    }
+}
+
 /// Executes a command on hub and returns the response.
 pub fn execute_command(command: &ClientCommand, expires_in: u64) -> Result<ClientResponse> {
     match UnixStream::connect(get_socket_path()) {
@@ -53,13 +62,13 @@ pub fn list_nodes() -> Result<Vec<Node>> {
     Ok(nodes)
 }
 
-/// Executes command on a specific node and returns result.
+/// Executes command on a specific node with given serial and returns result.
 ///
 /// Note: Streaming result is not enabled. This will block until command execution completes.
-pub fn raw_command(node: &Node, command: Request, expires_in: u64) -> Result<Response> {
+pub fn raw_command_with_serial(serial: u32, command: Request, expires_in: u64) -> Result<Response> {
     let raw_resp = execute_command(
         &ClientCommand::RawCommand {
-            node_serial: node.serial,
+            node_serial: serial,
             command,
             expire_time: match expires_in {
                 0 => UNIX_EPOCH,
@@ -75,4 +84,11 @@ pub fn raw_command(node: &Node, command: Request, expires_in: u64) -> Result<Res
         response
     )?;
     Ok(response)
+}
+
+/// Executes command on a specific node and returns result.
+///
+/// Note: Streaming result is not enabled. This will block until command execution completes.
+pub fn raw_command(node: &Node, command: Request, expires_in: u64) -> Result<Response> {
+    raw_command_with_serial(node.serial, command, expires_in)
 }

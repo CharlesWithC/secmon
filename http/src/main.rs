@@ -128,6 +128,7 @@ async fn main() -> std::io::Result<()> {
             .route("/subscribe", web::get().to(handle_subscribe))
             .service(routes::get_list)
             .service(routes::get_nodes)
+            .service(routes::post_execute)
     })
     .bind((*ip, *port))?
     .run()
