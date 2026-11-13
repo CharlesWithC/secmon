@@ -6,17 +6,11 @@ This is a minimal viable implementation that sends ssh/su updates, allows user t
 
 ## Basic Usage
 
-Configure mandatory environment variables: `TELEGRAM_BOT_TOKEN` and `TELEGRAM_USER_ID`.
+Configure required `token` and `user_id` in `config.toml`.
 
-- `TELEGRAM_USER_ID` refers to the user that is authorized to use the bot. This user would receive all node updates and be able to execute commands. Only a single user is allowed.
+- `user_id` refers to the user that is authorized to use the bot. This user would receive all node updates and be able to execute commands. Only a single user is allowed.
 
-The following environment variables may be configured optionally:
-
-- `IPV4ONLY=<true|false>`
-- `TIMEZONE=<timezone>`
-- `COMMAND_ALLOWLIST_FILE=<path>`
-
-Then, start the bot with `secmon-tg [upd] [exec]`.
+Then, start the bot with `secmon-tg -c config.toml [upd] [exec]`.
 
 - `[upd]` decides whether to send the authorized user node updates on SSH and SU sessions.
 - `[exec]` decides whether the authorized user is allowed to execute commands remotely.

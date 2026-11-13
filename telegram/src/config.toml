@@ -1,0 +1,22 @@
+# secmon-tg sample config file
+# the following can be appended to the main config file
+# note: node ordering rules from [client] in core config is reused
+
+# ============================================================
+[telegram]
+token = "" # required bot token
+
+# id of telegram user to accept commands from and send updates to
+user_id = 1234
+
+# list of command labels that may be executed through the bot
+# the labels should match the ones in node command allowlist
+command_allowlist = ["update", "reboot"]
+
+# timezone for date time in messages
+# default: system timezone, or fall back to UTC
+timezone = ""
+
+# whether to disable ipv6 when communicating with telegram api
+# note: ipv6 connection may timeout; enable this if that happens
+ipv4_only = false

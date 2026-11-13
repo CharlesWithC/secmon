@@ -12,37 +12,31 @@ use std::process;
 use std::thread;
 use std::time::Duration;
 
+use secmon::GENERIC_OPTIONS;
+use secmon::config::get_config;
 use secmon::models::hub::{ClientCommand, ClientResponse};
 use secmon::models::packet::Request;
 use secmon::traits::iosered::IOSerialized;
-use secmon::utils::{get_env_var, get_env_var_strict, get_socket_path, read_lines};
+use secmon::utils::{get_socket_path, init_from_generic_args, sanitize_generic_args};
 use secmon_http::utils;
 
+mod config;
 mod parser;
+use crate::config::{CONFIG, TelegramConfig};
 
-const ARGS: [&str; 3] = ["help", "upd", "exec"];
+const ARGS: [&str; 2] = ["upd", "exec"];
 
-const USAGE: &str = "Usage:
+const USAGE: &str = const_format::formatcp!(
+    "Usage:
   secmon-tg [upd] [exec]            launch telegram bot
   secmon-tg help                    show this help message
 
   Unlike core cli client, remote command execution here does not stream result,
   and so the bot may appear to stall when remotely executing a slow command.
 
-Environment:
-  TELEGRAM_BOT_TOKEN=<token>        mandatory
-  TELEGRAM_USER_ID=<user-id>        mandatory; user authorized to use the bot
-  IPV4ONLY=<true|false>             optional; use if ipv6 connection times out
-  COMMAND_ALLOWLIST_FILE=<path>     optional; necessary for [exec] to function
-
-COMMAND_ALLOWLIST_FILE:
-  A file containing commands that may be executed remotely by authorized user.
-  This file is supposed to filter allowed commands for security purposes.
-  Provide one command label that matches some node command label in each line.
-  Examples:
-    LABEL
-    update
-    reboot";
+  Options:
+    {GENERIC_OPTIONS}"
+);
 
 /// Returns a `Bot` with static lifetime.
 fn build_bot() -> &'static Bot {
@@ -50,13 +44,13 @@ fn build_bot() -> &'static Bot {
         .http_status_as_error(false)
         .ip_family(ureq::config::IpFamily::Ipv4Only)
         .timeout_global(Some(Duration::from_secs(500)));
-    if get_env_var_strict("IPV4ONLY", Some(false)) {
+    if get_config!(telegram).ipv4_only {
         println!("[NOTE] IPV4ONLY is enabled");
         config_builder = config_builder.ip_family(ureq::config::IpFamily::Ipv4Only)
     }
     let agent = ureq::Agent::new_with_config(config_builder.build());
 
-    let token = get_env_var_strict::<String>("TELEGRAM_BOT_TOKEN", None);
+    let token = get_config!(telegram).token.clone();
 
     let bot = Bot::builder()
         .api_url(format!("{}{token}", frankenstein::BASE_API_URL))
@@ -102,66 +96,39 @@ fn handle_message(
     message: String,
 ) -> Result<()> {
     match message.split_whitespace().collect::<Vec<_>>().as_slice() {
-        [query @ ("list" | "-" | _)] => {
-            let nodes = match *query {
+        // note: label may be empty; that indicates listing nodes
+        [query @ ("list" | "-" | _), label @ ..] => {
+            let mut nodes = match *query {
                 "list" | "-" => utils::list_nodes()?,
                 query @ _ => utils::find_nodes((*query).to_owned())?,
             };
-            send_message(parser::parse_node_list(tz, &nodes));
-        }
-        [query @ ("-" | _), label @ ..] => {
-            if !enable_exec {
-                send_message(Some(format!("Remote command execution is not enabled")));
-                return Ok(());
-            }
+            secmon::utils::sort_nodes(&mut nodes, get_config!(client));
 
-            let command_label = label.join(" ");
-
-            match get_env_var::<String>("COMMAND_ALLOWLIST_FILE", None).unwrap() {
-                None => {
-                    send_message(Some(
-                        "Command allowlist not set (Missing env var: COMMAND_ALLOWLIST_FILE)"
-                            .to_owned(),
-                    ));
+            if label.is_empty() {
+                send_message(parser::parse_node_list(tz, &nodes));
+            } else {
+                if !enable_exec {
+                    send_message(Some(format!("Remote command execution is not enabled")));
+                    return Ok(());
                 }
 
-                Some(allowlist_file) => match read_lines(allowlist_file.clone()) {
-                    Err(e) => {
-                        send_message(Some(format!(
-                            "Unable to read '{allowlist_file}' (COMMAND_ALLOWLIST_FILE): {:?}",
-                            e
-                        )));
-                    }
-                    Ok(lines) => {
-                        for line in lines.map_while(Result::ok) {
-                            if command_label == line {
-                                let command = Request::Execute {
-                                    command_label,
-                                    stream: false,
-                                };
+                let command_label = label.join(" ");
+                if !get_config!(telegram)
+                    .command_allowlist
+                    .contains(&command_label)
+                {
+                    send_message(Some(format!("'{command_label}' is not an allowed command")));
+                    return Ok(());
+                }
 
-                                let nodes = match *query {
-                                    "list" | "-" => utils::list_nodes()?,
-                                    query @ _ => utils::find_nodes((*query).to_owned())?,
-                                };
-                                for (i, node) in
-                                    nodes.into_iter().filter(|node| node.connected).enumerate()
-                                {
-                                    if i != 0 {
-                                        println!("");
-                                    }
-
-                                    let result = utils::raw_command(&node, command.clone(), 0)?;
-                                    send_message(Some(parser::parse_result(&node, &result)));
-                                }
-
-                                return Ok(());
-                            }
-                        }
-
-                        send_message(Some(format!("'{command_label}' is not an allowed command")));
-                    }
-                },
+                let command = Request::Execute {
+                    command_label,
+                    stream: false,
+                };
+                for node in nodes.into_iter().filter(|node| node.connected) {
+                    let result = utils::raw_command(&node, command.clone(), 0)?;
+                    send_message(Some(parser::parse_result(&node, &result)));
+                }
             }
         }
         _ => {
@@ -173,40 +140,41 @@ fn handle_message(
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    if args.len() == 2 && args[1] == "help" {
+    let sanitized_args = sanitize_generic_args(&args);
+    if sanitized_args.len() == 2 && sanitized_args[1] == "help" {
         println!("{USAGE}");
         process::exit(0);
     }
 
-    let enable_upd = args.contains(&"upd".to_owned());
-    let enable_exec = args.contains(&"exec".to_owned());
-
-    if args[1..].iter().any(|a| !ARGS.contains(&a.as_str())) {
-        eprintln!("Invalid command; Use 'secmon-tg help' for help");
+    init_from_generic_args(&args, &CONFIG).unwrap_or_else(|e| {
+        eprintln!("{e}");
         process::exit(1);
-    }
+    });
 
-    let tz = get_env_var_strict(
-        "TIMEZONE",
-        Some(
-            iana_time_zone::get_timezone()
-                .unwrap_or_else(|_| "UTC".to_string())
-                .parse::<Tz>()
-                .unwrap_or(chrono_tz::UTC),
-        ),
-    );
+    let enable_upd = sanitized_args.contains(&"upd".to_owned());
+    let enable_exec = sanitized_args.contains(&"exec".to_owned());
+    sanitized_args[1..].iter().for_each(|a| {
+        if !ARGS.contains(&a.as_str()) {
+            eprintln!("Unrecognized option: {}\n\n{USAGE}", a);
+            process::exit(1);
+        }
+    });
 
+    let TelegramConfig {
+        timezone: tz,
+        user_id: owner_id,
+        ..
+    } = get_config!(telegram);
     let bot = build_bot();
 
     // helper function to send message with `user_id` copied inside
     let bot_clone = bot.clone();
-    let owner_id = get_env_var_strict::<u64>("TELEGRAM_USER_ID", None);
     let send_message = move |text: Option<String>| -> () {
         match text {
             None => return,
             Some(text) => {
                 let send_message_params = SendMessageParams::builder()
-                    .chat_id(owner_id as i64)
+                    .chat_id(*owner_id as i64)
                     .text(text)
                     .parse_mode(ParseMode::Html)
                     .build();
@@ -266,7 +234,7 @@ fn main() {
                                     .from
                                     .map(|user| (user.id, user.username.unwrap_or(String::new())))
                                     .unwrap_or((0, String::new()));
-                                if user_id != owner_id {
+                                if user_id != *owner_id {
                                     println!("Ignored message from {username} ({user_id})");
                                     continue;
                                 }

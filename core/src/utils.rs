@@ -200,6 +200,8 @@ pub fn parse_generic_args(args: &Vec<String>) -> Result<(Option<String>, bool)> 
 /// This removes `-c` and `-v` arguments from `args`, assuming `-c` is followed by config path.
 ///
 /// If an unrecognized argument is detected, prints an error and exits program.
+///
+/// Note: Commands (e.g. `hub` in `secmon hub`) are not parsed or removed.
 pub fn sanitize_generic_args(args: &Vec<String>) -> Vec<String> {
     let mut args = args.clone();
     let mut skip_next = false;

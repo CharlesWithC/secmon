@@ -87,7 +87,7 @@ async fn main() -> std::io::Result<()> {
         println!("{USAGE}");
         process::exit(0);
     } else if sanitized_args.len() != 1 {
-        println!("Unrecognized command: {}\n\n{USAGE}", sanitized_args[1]);
+        eprintln!("Unrecognized command: {}\n\n{USAGE}", sanitized_args[1]);
         process::exit(1);
     }
 

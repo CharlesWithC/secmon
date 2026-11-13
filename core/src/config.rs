@@ -347,7 +347,7 @@ fn default_hostname() -> String {
 
 /// Helper function to deseralize hostname.
 ///
-/// If hostname is empty, this overwrite it with default hostname.
+/// If hostname is empty, this overwrites it with default hostname.
 ///
 /// Note: This does not handle when hostname is not set, which is handled by `default` instead.
 fn hostname<'de, D>(deserializer: D) -> Result<String, D::Error>

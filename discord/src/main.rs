@@ -45,7 +45,7 @@ fn main() {
         println!("{USAGE}");
         process::exit(0);
     } else if sanitized_args.len() != 1 && sanitized_args[1] != "test" {
-        println!("Unrecognized command: {}\n\n{USAGE}", sanitized_args[1]);
+        eprintln!("Unrecognized command: {}\n\n{USAGE}", sanitized_args[1]);
         process::exit(1);
     }
 

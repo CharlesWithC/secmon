@@ -1895,10 +1895,12 @@ dependencies = [
  "anyhow",
  "chrono",
  "chrono-tz",
+ "const_format",
  "frankenstein",
  "iana-time-zone",
  "secmon",
  "secmon-http",
+ "serde",
 ]
 
 [[package]]

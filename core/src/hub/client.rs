@@ -206,7 +206,7 @@ pub fn main(command: String, stream: &mut UnixStream) -> Result<()> {
                 println!("{}", resp);
             }
         }
-        // note: label may be empty; this indicates listing nodes
+        // note: label may be empty; that indicates listing nodes
         [query @ ("-" | _), label @ ..] => {
             if query == &"-" {
                 stream.write(&ClientCommand::ListNodes)?;
