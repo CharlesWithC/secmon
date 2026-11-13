@@ -6,11 +6,13 @@ use std::{env, process};
 
 mod hub;
 mod node;
+use secmon::GENERIC_OPTIONS;
 use secmon::config::{CONFIG, get_config};
 use secmon::crypto::{Key, NOISE_KEYLEN, NOISE_PATTERN};
 use secmon::utils::{get_socket_path, init_from_generic_args, sanitize_generic_args};
 
-const USAGE: &str = "Usage:
+const USAGE: &str = const_format::formatcp!(
+    "Usage:
   secmon hub                        launch hub daemon
   secmon node                       launch node daemon
   secmon help                       show this help message
@@ -29,11 +31,8 @@ Utility commands:
   Due to sync design, each node can only handle one command at a time.
 
 Options:
-  -c, --config <file>               specify a config file, otherwise tries:
-                                    $XDG_CONFIG_HOME/secmon/config.toml,
-                                    /etc/secmon/config.toml in order by default
-  -v, --verbose                     verbose mode
-";
+  {GENERIC_OPTIONS}"
+);
 
 /// Handles simple commands that do not involve options.
 ///

@@ -8,25 +8,25 @@ use std::time::Duration;
 use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::broadcast::{self, Sender};
 
+use secmon::GENERIC_OPTIONS;
 use secmon::config::get_config;
 use secmon::models::hub::{ClientCommand, ClientResponse};
 use secmon::traits::iosered::IOSerialized;
-use secmon::utils::{get_socket_path, init_from_generic_args};
+use secmon::utils::{get_socket_path, init_from_generic_args, sanitize_generic_args};
 
 mod models;
 mod routes;
 use crate::models::BodyNodeUpdate;
 use secmon_http::config::{CONFIG, HttpConfig};
 
-const USAGE: &str = "Usage:
+const USAGE: &str = const_format::formatcp!(
+    "Usage:
   secmon-http                       launch http server
   secmon-http help                  show this help message
 
 Options:
-    -c, --config <file>               specify a config file, otherwise tries:
-                                      $XDG_CONFIG_HOME/secmon/config.toml,
-                                      /etc/secmon/config.toml in order by default
-    -v, --verbose                     verbose mode";
+  {GENERIC_OPTIONS}"
+);
 
 /// Subscribes to hub for node updates, then broadcasts updates.
 fn handle_node_update(upd_s: Sender<BodyNodeUpdate>) -> Result<()> {
@@ -82,9 +82,13 @@ async fn handle_subscribe(
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let args: Vec<String> = env::args().collect();
-    if args.len() == 2 && args[1] == "help" {
+    let sanitized_args = sanitize_generic_args(&args);
+    if sanitized_args.len() == 2 && sanitized_args[1] == "help" {
         println!("{USAGE}");
         process::exit(0);
+    } else if sanitized_args.len() != 1 {
+        println!("Unrecognized command: {}\n\n{USAGE}", sanitized_args[1]);
+        process::exit(1);
     }
 
     init_from_generic_args(&args, &CONFIG).unwrap_or_else(|e| {
