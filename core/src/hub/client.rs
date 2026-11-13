@@ -6,11 +6,11 @@ use std::os::unix::net::UnixStream;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use secmon::config::{CONFIG, get_config};
+use secmon::logging::vprintln;
 use secmon::models::hub::{ClientCommand, ClientResponse, Node};
 use secmon::models::node::NodeDataError;
 use secmon::models::packet::{Request, Response, ResultStatus};
 use secmon::traits::iosered::IOSerialized;
-use secmon::utils::vprintln;
 
 macro_rules! match_strict {
     ( $response:expr, $pattern:pat, $return:expr ) => {

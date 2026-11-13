@@ -2,32 +2,19 @@ use anyhow::{Result, anyhow, bail};
 use crossbeam_channel::Receiver;
 use serde::de::DeserializeOwned;
 use std::cmp::Ordering;
-use std::fs;
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::{self, BufRead};
 use std::path::Path;
 use std::str::FromStr;
-use std::thread;
+use std::sync::OnceLock;
 use std::time::Duration;
-use std::{env, process};
+use std::{env, process, thread};
 use users::get_current_uid;
 
 use crate::config::{ClientConfig, NodeOrderKey};
+use crate::logging::vprintln;
 use crate::models::hub::Node;
 use crate::models::packet::{Response, ResultStatus};
-
-/// `println!` wrapper for verbose mode.
-#[doc(hidden)]
-#[macro_export]
-macro_rules! __vprintln {
-    ($($arg:tt)*) => {
-        // note: VERBOSE is not set if -v/--verbose is not passed
-        if *secmon::config::VERBOSE.get().unwrap_or(&false) {
-            println!($($arg)*);
-        }
-    };
-}
-pub use crate::__vprintln as vprintln;
 
 /// Returns the length for display for a `Result<Vec<_>>` value.
 ///
@@ -208,12 +195,12 @@ pub fn parse_generic_args(args: &Vec<String>) -> Result<(Option<String>, bool)> 
     Ok((config_path, verbose))
 }
 
-/// Sanitizes generic command line arguments in place.
+/// Returns sanitized generic command line arguments.
 ///
-/// This removes `-c` and `-v` arguments from `args`.
+/// This removes `-c` and `-v` arguments from `args`, assuming `-c` is followed by config path.
 ///
-/// Note: We assume that `args` is valid, i.e. `-c` is followed by config path.
-pub fn sanitize_generic_args(args: &mut Vec<String>) -> () {
+/// If an unrecognized argument is detected, prints an error and exits program.
+pub fn sanitize_generic_args(args: &Vec<String>) -> Vec<String> {
     let mut args = args.clone();
     let mut skip_next = false;
     args.retain(|a| {
@@ -226,9 +213,16 @@ pub fn sanitize_generic_args(args: &mut Vec<String>) -> () {
                 skip_next = true;
                 false
             }
-            _ => true,
+            _ => {
+                if a.starts_with("-") {
+                    println!("Invalid argument: {a:?}");
+                    process::exit(1);
+                }
+                true
+            }
         }
     });
+    args
 }
 
 /// Returns parsed toml configuration given an optional path.
@@ -274,4 +268,28 @@ pub fn read_config<T: DeserializeOwned>(path: Option<String>) -> Result<T> {
     println!("Using config file at {config_path}");
 
     toml::from_str::<T>(&config_raw).map_err(|e| anyhow!("Unable to parse config file: {e}"))
+}
+
+/// Initialize program from generic arguments, specifically,
+/// - detects configuration file, then parses and sets it in `config`
+/// - detects verbose mode, then sets it in `verbose`
+pub fn init_from_generic_args<T: DeserializeOwned + std::fmt::Debug>(
+    args: &Vec<String>,
+    config: &OnceLock<T>,
+    verbose: &OnceLock<bool>,
+) -> Result<()> {
+    let (config_path, _verbose) = parse_generic_args(args)?;
+    let _config = read_config::<T>(config_path)?;
+
+    verbose
+        .set(_verbose)
+        .map_err(|_| panic!("Error when setting verbose mode"));
+
+    vprintln!("{:?}", _config);
+
+    config
+        .set(_config)
+        .map_err(|_| panic!("Error when setting config"));
+
+    Ok(())
 }

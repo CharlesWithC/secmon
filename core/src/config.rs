@@ -6,15 +6,14 @@ use std::sync::OnceLock;
 
 use crate::crypto::Key;
 
-/// Whether to print verbose log. Used by `vprintln!`.
-pub static VERBOSE: OnceLock<bool> = OnceLock::new();
-/// Parsed config.
 pub static CONFIG: OnceLock<Config> = OnceLock::new();
 
 const DEFAULT_IP: IpAddr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
 const DEFAULT_PORT: u16 = 9992;
 
 /// Macro for getting hub/node/client config.
+///
+/// Note: `CONFIG` must be imported locally.
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __get_config {

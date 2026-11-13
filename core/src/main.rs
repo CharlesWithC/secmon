@@ -6,11 +6,10 @@ use std::{env, process};
 
 mod hub;
 mod node;
-use secmon::config::{CONFIG, Config, VERBOSE, get_config};
+use secmon::config::{CONFIG, get_config};
 use secmon::crypto::{Key, NOISE_KEYLEN, NOISE_PATTERN};
-use secmon::utils::{
-    get_socket_path, parse_generic_args, read_config, sanitize_generic_args, vprintln,
-};
+use secmon::logging::VERBOSE;
+use secmon::utils::{get_socket_path, init_from_generic_args, sanitize_generic_args};
 
 const USAGE: &str = "Usage:
   secmon hub                        launch hub daemon
@@ -77,28 +76,6 @@ fn handle_simple_command(args: &Vec<String>) -> Result<bool> {
     }
 }
 
-/// Parses and handles options in args, specifically,
-/// - loads configuration file
-/// - detects verbose mode
-///
-/// Note: `CONFIG` and `VERBOSE` should not be set prior. If set, this function would panic.
-fn handle_args(args: &Vec<String>) -> Result<()> {
-    let (config_path, verbose) = parse_generic_args(args)?;
-    let config = read_config::<Config>(config_path)?;
-
-    VERBOSE
-        .set(verbose)
-        .map_err(|_| panic!("Error when setting verbose mode"));
-
-    vprintln!("{:?}", config);
-
-    CONFIG
-        .set(config)
-        .map_err(|_| panic!("Error when setting config"));
-
-    Ok(())
-}
-
 /// Wrapped "real" main to return errors if any.
 fn launch(args: &Vec<String>) -> Result<()> {
     match args.get(1).unwrap().as_str() {
@@ -155,14 +132,15 @@ fn launch(args: &Vec<String>) -> Result<()> {
 }
 
 fn main() {
-    let mut args: Vec<String> = env::args().collect();
+    let args: Vec<String> = env::args().collect();
+    let sanitized_args = sanitize_generic_args(&args);
 
     if args.len() < 2 {
         println!("{USAGE}");
         process::exit(1);
     }
 
-    match handle_simple_command(&args) {
+    match handle_simple_command(&sanitized_args) {
         Ok(true) => {
             process::exit(0);
         }
@@ -173,13 +151,12 @@ fn main() {
         _ => {} // not a simple command! keep going!
     }
 
-    handle_args(&args).unwrap_or_else(|e| {
+    init_from_generic_args(&args, &CONFIG, &VERBOSE).unwrap_or_else(|e| {
         eprintln!("{e}");
         process::exit(1);
     });
 
-    sanitize_generic_args(&mut args);
-    if let Err(e) = launch(&args) {
+    if let Err(e) = launch(&sanitized_args) {
         eprintln!("{e}");
         process::exit(1);
     } else {
