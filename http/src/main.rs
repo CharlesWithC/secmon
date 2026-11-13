@@ -8,20 +8,25 @@ use std::time::Duration;
 use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::broadcast::{self, Sender};
 
+use secmon::config::get_config;
 use secmon::models::hub::{ClientCommand, ClientResponse};
 use secmon::traits::iosered::IOSerialized;
-use secmon::utils::{get_env_var_strict, get_socket_path};
+use secmon::utils::{get_socket_path, init_from_generic_args};
 
 mod models;
 mod routes;
-use crate::models::{BodyNodeUpdate, DEFAULT_IP, DEFAULT_PORT};
+use crate::models::BodyNodeUpdate;
+use secmon_http::config::{CONFIG, HttpConfig};
 
 const USAGE: &str = "Usage:
   secmon-http                       launch http server
   secmon-http help                  show this help message
 
-Environment:
-  SERVER_IP=<ip> SERVER_PORT=<port> (default: 127.0.0.1:9993)";
+Options:
+    -c, --config <file>               specify a config file, otherwise tries:
+                                      $XDG_CONFIG_HOME/secmon/config.toml,
+                                      /etc/secmon/config.toml in order by default
+    -v, --verbose                     verbose mode";
 
 /// Subscribes to hub for node updates, then broadcasts updates.
 fn handle_node_update(upd_s: Sender<BodyNodeUpdate>) -> Result<()> {
@@ -76,17 +81,20 @@ async fn handle_subscribe(
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    let ip = get_env_var_strict("SERVER_IP", Some(DEFAULT_IP));
-    let port = get_env_var_strict("SERVER_PORT", Some(DEFAULT_PORT));
-
     let args: Vec<String> = env::args().collect();
     if args.len() == 2 && args[1] == "help" {
         println!("{USAGE}");
         process::exit(0);
-    } else if args.len() != 1 {
-        eprintln!("Invalid command; Use 'secmon-http help' for help");
-        process::exit(1);
     }
+
+    init_from_generic_args(&args, &CONFIG).unwrap_or_else(|e| {
+        eprintln!("{e}");
+        process::exit(1);
+    });
+    let HttpConfig {
+        bind_ip: ip,
+        bind_port: port,
+    } = get_config!(http);
 
     let (upd_s, _) = broadcast::channel::<BodyNodeUpdate>(32);
     let upd_s_t = upd_s.clone();
@@ -98,7 +106,7 @@ async fn main() -> std::io::Result<()> {
             if let Err(e) = handle_node_update(upd_s) {
                 let e_str = format!("{e}");
                 if last_error != e_str {
-                    println!("{e_str}");
+                    println!("Unable to connect to hub daemon: {e_str}");
                     last_error = e_str;
                 }
             }
@@ -117,7 +125,7 @@ async fn main() -> std::io::Result<()> {
             .service(routes::get_list)
             .service(routes::get_nodes)
     })
-    .bind((ip, port))?
+    .bind((*ip, *port))?
     .run()
     .await
 }

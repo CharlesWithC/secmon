@@ -8,7 +8,6 @@ mod hub;
 mod node;
 use secmon::config::{CONFIG, get_config};
 use secmon::crypto::{Key, NOISE_KEYLEN, NOISE_PATTERN};
-use secmon::logging::VERBOSE;
 use secmon::utils::{get_socket_path, init_from_generic_args, sanitize_generic_args};
 
 const USAGE: &str = "Usage:
@@ -151,7 +150,7 @@ fn main() {
         _ => {} // not a simple command! keep going!
     }
 
-    init_from_generic_args(&args, &CONFIG, &VERBOSE).unwrap_or_else(|e| {
+    init_from_generic_args(&args, &CONFIG).unwrap_or_else(|e| {
         eprintln!("{e}");
         process::exit(1);
     });

@@ -272,16 +272,15 @@ pub fn read_config<T: DeserializeOwned>(path: Option<String>) -> Result<T> {
 
 /// Initialize program from generic arguments, specifically,
 /// - detects configuration file, then parses and sets it in `config`
-/// - detects verbose mode, then sets it in `verbose`
+/// - detects verbose mode, then sets it in `secmon::logging::VERBOSE`
 pub fn init_from_generic_args<T: DeserializeOwned + std::fmt::Debug>(
     args: &Vec<String>,
     config: &OnceLock<T>,
-    verbose: &OnceLock<bool>,
 ) -> Result<()> {
     let (config_path, _verbose) = parse_generic_args(args)?;
     let _config = read_config::<T>(config_path)?;
 
-    verbose
+    crate::logging::VERBOSE
         .set(_verbose)
         .map_err(|_| panic!("Error when setting verbose mode"));
 
