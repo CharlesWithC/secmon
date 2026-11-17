@@ -199,7 +199,7 @@ impl From<Vec<u8>> for Key {
     fn from(v: Vec<u8>) -> Self {
         Self(
             v.try_into()
-                .expect("vec key should fit in slice; check KEYLENGTH"),
+                .expect("vec key should fit in slice; check key length"),
         )
     }
 }
