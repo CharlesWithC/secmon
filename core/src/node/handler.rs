@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
-use secmon::config::{CONFIG, get_config};
+use secmon::config::{CONFIG, NodeResource, get_config};
 use secmon::models::node::{NodeDataError, NodeStateMutex, NodeUpdate};
 use secmon::models::packet::{Request, Response, ResultStatus};
 use secmon::traits::exec::{ChildWait, CommandExec, ExecResult};
@@ -176,10 +176,10 @@ pub fn update_node_state(node_state_mutex: &NodeStateMutex) -> (bool, NodeUpdate
     let node_config = get_config!(node);
 
     /// Function to map resource label to node state label.
-    fn map_resource(resource: &str) -> &str {
+    fn map_resource(resource: &NodeResource) -> &str {
         match resource {
-            "who" => "sessions",
-            "wg" => "wg_peers",
+            NodeResource::Who => "sessions",
+            NodeResource::Wg => "wg_peers",
             _ => "",
         }
     }
@@ -258,7 +258,11 @@ fn run_journalctl(
         "short-iso",
         "-q", // stay quiet on warning message
     ]; // base args
-    if node_config.resources.iter().any(|s| s == "auth") {
+    if node_config
+        .resources
+        .iter()
+        .any(|s| matches!(s, NodeResource::Auth))
+    {
         args.extend([
             "-t",
             "sshd", // old sshd identifier

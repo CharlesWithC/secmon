@@ -7,7 +7,7 @@ use std::time::{Duration, SystemTime};
 
 mod data;
 mod handler;
-use secmon::config::{CONFIG, NodeConfig, get_config};
+use secmon::config::{CONFIG, NodeConfig, NodeResource, get_config};
 use secmon::crypto::{
     NOISE_HANDSHAKE_MAXLEN, NOISE_HANDSHAKE_MAXTIME, NOISE_MAXLEN, NOISE_PATTERN, NoiseShared,
     NoisyStream,
@@ -197,7 +197,11 @@ pub fn main() -> Result<()> {
                 });
             }
 
-            if node_config.resources.iter().any(|s| s == "auth") {
+            if node_config
+                .resources
+                .iter()
+                .any(|s| matches!(s, NodeResource::Auth))
+            {
                 // thread that tracks `journalctl` for updates
                 // note: to terminate this thread, set `terminate_flag` to `true`
                 //       and then kill the journalctl child process; killing without

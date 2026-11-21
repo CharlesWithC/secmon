@@ -1,6 +1,7 @@
 use gethostname::gethostname;
 use serde::{Deserialize, Deserializer, de::Error};
 use std::collections::BTreeMap;
+use std::fmt;
 use std::net::{IpAddr, Ipv4Addr};
 use std::sync::OnceLock;
 
@@ -144,7 +145,7 @@ pub struct NodeConfig {
     /// Resources to monitor.
     ///
     /// Accepted resources: "who", "wg", "auth".
-    pub resources: Vec<String>,
+    pub resources: Vec<NodeResource>,
 
     /// Time (in seconds) to wait when executing a command, before killing the child process. Use 0 to disable.
     pub command_execute_timeout: u64,
@@ -175,6 +176,34 @@ impl Default for NodeConfig {
             command_allowlist: BTreeMap::new(),
             noise: NodeNoise::default(),
         }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum NodeResource {
+    Who,
+    Wg,
+    Auth,
+}
+
+impl fmt::Debug for NodeResource {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self.to_string())
+    }
+}
+
+impl fmt::Display for NodeResource {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Who => "who",
+                Self::Wg => "wg",
+                Self::Auth => "auth",
+            }
+        )
     }
 }
 
@@ -345,7 +374,7 @@ fn default_hostname() -> String {
     gethostname().to_string_lossy().into_owned()
 }
 
-/// Helper function to deseralize hostname.
+/// Helper function to deserialize hostname.
 ///
 /// If hostname is empty, this overwrites it with default hostname.
 ///
