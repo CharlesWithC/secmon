@@ -24,13 +24,11 @@ use secmon_http::utils;
 
 mod config;
 mod parser;
-use crate::config::{CONFIG, TelegramConfig};
-
-const ARGS: [&str; 2] = ["upd", "exec"];
+use crate::config::{CONFIG, TelegramConfig, TelegramFeature};
 
 const USAGE: &str = const_format::formatcp!(
     "Usage:
-  secmon-tg [upd] [exec]            launch telegram bot
+  secmon-tg                         launch telegram bot
   secmon-tg help                    show this help message
 
   Unlike core cli client, remote command execution here does not stream result,
@@ -153,6 +151,9 @@ fn main() {
     if sanitized_args.len() == 2 && sanitized_args[1] == "help" {
         println!("{USAGE}");
         process::exit(0);
+    } else if sanitized_args.len() != 1 {
+        eprintln!("Unrecognized command: {}\n\n{USAGE}", sanitized_args[1]);
+        process::exit(1);
     }
 
     init_from_generic_args(&args, &CONFIG).unwrap_or_else(|e| {
@@ -160,18 +161,10 @@ fn main() {
         process::exit(1);
     });
 
-    let enable_upd = sanitized_args.contains(&"upd".to_owned());
-    let enable_exec = sanitized_args.contains(&"exec".to_owned());
-    sanitized_args[1..].iter().for_each(|a| {
-        if !ARGS.contains(&a.as_str()) {
-            eprintln!("Unrecognized option: {}\n\n{USAGE}", a);
-            process::exit(1);
-        }
-    });
-
     let TelegramConfig {
         timezone: tz,
         user_id: owner_id,
+        features,
         ..
     } = get_config!(telegram);
     let bot = build_bot();
@@ -212,7 +205,7 @@ fn main() {
     };
 
     // thread to handle node updates
-    if enable_upd {
+    if features.iter().any(|s| matches!(s, TelegramFeature::Upd)) {
         let send_message = send_message.clone();
         thread::spawn(move || {
             // note: this thread does not terminate until main program is terminated
@@ -266,7 +259,7 @@ fn main() {
 
                                 if let Some(message) = message.text {
                                     if let Err(e) = handle_message(
-                                        enable_exec,
+                                        features.iter().any(|s| matches!(s, TelegramFeature::Exec)),
                                         &tz,
                                         &send_message,
                                         &send_document,

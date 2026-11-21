@@ -1,5 +1,6 @@
 use chrono_tz::Tz;
 use serde::{Deserialize, Deserializer, de::Error};
+use std::fmt;
 use std::sync::OnceLock;
 
 pub static CONFIG: OnceLock<Config> = OnceLock::new();
@@ -22,6 +23,12 @@ pub struct TelegramConfig {
     /// ID of telegram user to accept commands from and send updates to.
     pub user_id: u64,
 
+    /// Features to enable; Select from 'upd', 'exec'.
+    /// - 'upd' sends updates on node status and auth events
+    /// - 'exec' allows user to execute allowed commands from telegram
+    #[serde(default)]
+    pub features: Vec<TelegramFeature>,
+
     /// List of command labels that may be executed through the bot.
     ///
     /// The labels should match the ones in node command allowlist.
@@ -39,6 +46,32 @@ pub struct TelegramConfig {
     /// Note: ipv6 connection may timeout; enable this if that happens
     #[serde(default)]
     pub ipv4_only: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TelegramFeature {
+    Upd,
+    Exec,
+}
+
+impl fmt::Debug for TelegramFeature {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self.to_string())
+    }
+}
+
+impl fmt::Display for TelegramFeature {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Upd => "upd",
+                Self::Exec => "exec",
+            }
+        )
+    }
 }
 
 /// Helper function to deserialize a string that must not be empty.

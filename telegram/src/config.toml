@@ -9,6 +9,11 @@ token = "" # required bot token
 # id of telegram user to accept commands from and send updates to
 user_id = 1234
 
+# features to enable; select from 'upd', 'exec'
+# - 'upd' sends updates on node status and auth events
+# - 'exec' allows user to execute allowed commands from telegram
+features = ["upd", "exec"]
+
 # list of command labels that may be executed through the bot
 # the labels should match the ones in node command allowlist
 command_allowlist = ["update", "reboot"]

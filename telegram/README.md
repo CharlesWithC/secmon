@@ -6,14 +6,9 @@ This is a minimal viable implementation that sends ssh/su updates, allows user t
 
 ## Basic Usage
 
-Configure required `token` and `user_id` in `config.toml`.
+Configure required `token` and `user_id` in `config.toml`. Optionally, modify enabled features with `features` attribute in config.
 
 - `user_id` refers to the user that is authorized to use the bot. This user would receive all node updates and be able to execute commands. Only a single user is allowed.
-
-Then, start the bot with `secmon-tg -c config.toml [upd] [exec]`.
-
-- `[upd]` decides whether to send the authorized user node updates on SSH and SU sessions.
-- `[exec]` decides whether the authorized user is allowed to execute commands remotely.
 
 See `secmon-tg help` for detailed information on using the program.
 
