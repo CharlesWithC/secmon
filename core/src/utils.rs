@@ -216,7 +216,7 @@ pub fn sanitize_generic_args(args: &Vec<String>) -> Vec<String> {
                 false
             }
             _ => {
-                if a.starts_with("-") {
+                if a.starts_with("-") && a != "-" {
                     println!("Invalid argument: {a:?}");
                     process::exit(1);
                 }
