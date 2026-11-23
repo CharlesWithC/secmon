@@ -152,7 +152,7 @@ pub fn parse_journalctl_log(line: String) -> Result<Option<AuthLog>> {
                 },
             })),
         #[rustfmt::skip]
-        ["pam_unix(su:session):", "session", "opened", "for", "user", target_user, "by", user] =>
+        [_, "session", "opened", "for", "user", target_user, "by", user] =>
             Ok(Some(AuthLog {
                 time,
                 process,
@@ -172,7 +172,7 @@ pub fn parse_journalctl_log(line: String) -> Result<Option<AuthLog>> {
                 },
             })),
         #[rustfmt::skip]
-        ["pam_unix(su:session):", "session", "closed", "for", "user", target_user] =>
+        [_, "session", "closed", "for", "user", target_user] =>
             Ok(Some(AuthLog {
                 time,
                 process,

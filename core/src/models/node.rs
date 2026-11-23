@@ -229,7 +229,7 @@ pub enum AuthLogDetail {
     /// SU session opened
     ///
     /// Example:
-    /// ```pam_unix(su:session): session opened for user root(uid=0) by drako(uid=0)```
+    /// ```pam_unix(_): session opened for user root(uid=0) by drako(uid=1000)```
     SuOpen { target_user: String },
     /// SU session failed
     ///
@@ -241,7 +241,7 @@ pub enum AuthLogDetail {
     /// Note: The source/action user is not provided.
     ///
     /// Example:
-    /// ```pam_unix(su:session): session closed for user root```
+    /// ```pam_unix(_): session closed for user root```
     SuClose { target_user: String },
 }
 

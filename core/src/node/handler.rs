@@ -270,6 +270,8 @@ fn run_journalctl(
             "sshd-session", // modern sshd identifier
             "-t",
             "su", // su sessions
+            "-t",
+            "login", // tty login
         ]);
     }
 
