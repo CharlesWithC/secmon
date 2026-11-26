@@ -6,7 +6,7 @@ use std::fmt;
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
-use crate::utils::get_display_len;
+use crate::utils::get_vec_len;
 
 /// Time in seconds between `KeepAlive` messages
 pub const KEEPALIVE_INTERVAL: u64 = 60;
@@ -30,7 +30,7 @@ impl fmt::Display for NodeDataError {
             Self::Initializing => write!(f, "Initializing"),
             Self::NotMonitored => write!(f, "NotMonitored"),
             Self::Message(message) => {
-                write!(f, "Message(message={:?})", message)
+                write!(f, "Message(message={message:?})")
             }
         }
     }
@@ -50,8 +50,8 @@ impl fmt::Display for NodeState {
         write!(
             f,
             "NodeState(sessions[{}], wg_peers[{}])",
-            get_display_len(&self.sessions),
-            get_display_len(&self.wg_peers)
+            get_vec_len(&self.sessions),
+            get_vec_len(&self.wg_peers)
         )
     }
 }
@@ -96,10 +96,10 @@ impl fmt::Display for NodeUpdate {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut data = Vec::<String>::new();
         if let Some(ref sessions) = self.sessions {
-            data.push(format!("sessions[{}]", get_display_len(sessions)));
+            data.push(format!("sessions[{}]", get_vec_len(sessions)));
         };
         if let Some(ref wg_peers) = self.wg_peers {
-            data.push(format!("wg_peers[{}]", get_display_len(wg_peers)));
+            data.push(format!("wg_peers[{}]", get_vec_len(wg_peers)));
         };
         if let Some(ref auth_log_res) = self.auth_log {
             match auth_log_res {
@@ -129,15 +129,12 @@ pub type Sessions = Result<Vec<Session>, NodeDataError>;
 
 impl fmt::Display for Session {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let dt: DateTime<Utc> = self.login.into();
-        let login_parsed = format!("{}", dt);
-
         write!(
             f,
             "Session(user={:?}, from={:?}, login={:?})",
             self.user,
             self.from.as_deref().unwrap_or("N/A"),
-            login_parsed
+            DateTime::<Utc>::from(self.login).format("%F %T").to_string(),
         )
     }
 }
@@ -159,19 +156,16 @@ pub type WgPeers = Result<Vec<WgPeer>, NodeDataError>;
 
 impl fmt::Display for WgPeer {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut latest_handshake_parsed = String::from("N/A");
-        if let Some(st) = self.latest_handshake {
-            let dt: DateTime<Utc> = st.into();
-            latest_handshake_parsed = format!("{}", dt);
-        }
-
         write!(
             f,
             "WgPeer(interface={:?}, peer={:?}, endpoint={:?}, latest_handshake={:?})",
             self.interface,
             self.peer,
             self.endpoint.as_deref().unwrap_or("N/A"),
-            latest_handshake_parsed
+            match self.latest_handshake {
+                None => "N/A".to_owned(),
+                Some(st) => DateTime::<Utc>::from(st).format("%F %T").to_string(),
+            },
         )
     }
 }
@@ -193,13 +187,13 @@ pub type AuthLogUpdate = Result<AuthLog, NodeDataError>;
 
 impl fmt::Display for AuthLog {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let dt: DateTime<Utc> = self.time.into();
-        let time_parsed = format!("{}", dt);
-
         write!(
             f,
             "AuthLog(time={:?}, process={:?}, user={:?}, detail={})",
-            time_parsed, self.process, self.user, self.detail
+            DateTime::<Utc>::from(self.time).format("%F %T").to_string(),
+            self.process,
+            self.user,
+            self.detail
         )
     }
 }
@@ -250,23 +244,22 @@ impl fmt::Display for AuthLogDetail {
         match self {
             Self::SshConnect { host, port, method } => write!(
                 f,
-                "SshConnect(host={:?}, port={}, method={:?})",
-                host, port, method
+                "SshConnect(host={host:?}, port={port}, method={method:?})",
             ),
             Self::SshFailPassword { host, port } => {
-                write!(f, "SshFailPassword(host={:?}, port={})", host, port)
+                write!(f, "SshFailPassword(host={host:?}, port={port})")
             }
             Self::SshDisconnect { host, port } => {
-                write!(f, "SshDisconnect(host={:?}, port={})", host, port)
+                write!(f, "SshDisconnect(host={host:?}, port={port})")
             }
             Self::SuOpen { target_user } => {
-                write!(f, "SuOpen(target_user={:?})", target_user)
+                write!(f, "SuOpen(target_user={target_user:?})")
             }
             Self::SuFail { target_user } => {
-                write!(f, "SuFail(target_user={:?})", target_user)
+                write!(f, "SuFail(target_user={target_user:?})")
             }
             Self::SuClose { target_user } => {
-                write!(f, "SuClose(target_user={:?})", target_user)
+                write!(f, "SuClose(target_user={target_user:?})")
             }
         }
     }

@@ -16,11 +16,11 @@ use crate::logging::vprintln;
 use crate::models::hub::Node;
 use crate::models::packet::{Response, ResultStatus};
 
-/// Returns the length for display for a `Result<Vec<_>>` value.
+/// Returns the human-friendly length for a `Result<Vec<_>>` value.
 ///
 /// If the `Result` is an `Err`, then returns `-1`;
 /// otherwise, returns the length of the vector.
-pub fn get_display_len<T, E>(r: &Result<Vec<T>, E>) -> i32 {
+pub fn get_vec_len<T, E>(r: &Result<Vec<T>, E>) -> i32 {
     r.as_ref().map(|v| v.len() as i32).unwrap_or(-1)
 }
 

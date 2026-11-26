@@ -9,7 +9,7 @@ use std::time::SystemTime;
 
 use crate::models::node::{NodeUpdate, Sessions, WgPeers};
 use crate::models::packet::{Request, Response};
-use crate::utils::get_display_len;
+use crate::utils::get_vec_len;
 
 /// Represents command sent in channel between local command and remote node handler.
 ///
@@ -65,19 +65,17 @@ pub struct Node {
 
 impl fmt::Display for Node {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let last_update_dt: DateTime<Utc> = self.last_state_update.into();
-        let last_keepalive_dt: DateTime<Utc> = self.last_keepalive.into();
         write!(
             f,
             "Node(serial={}, hostname={:?}, group={:?}, address={:?}, sessions[{}], wg_peers[{}], last_update={:?}, last_keepalive={:?})",
             self.serial,
             self.hostname,
             self.group,
-            self.address,
-            get_display_len(&self.sessions),
-            get_display_len(&self.wg_peers),
-            last_update_dt,
-            last_keepalive_dt
+            self.address.to_string(),
+            get_vec_len(&self.sessions),
+            get_vec_len(&self.wg_peers),
+            DateTime::<Utc>::from(self.last_state_update).format("%F %T").to_string(),
+            DateTime::<Utc>::from(self.last_keepalive).format("%F %T").to_string(),
         )
     }
 }
@@ -118,10 +116,12 @@ impl fmt::Display for ClientCommand {
                 command,
                 expire_time,
             } => {
-                let expire_time_dt: DateTime<Utc> = (*expire_time).into();
                 write!(
                     f,
-                    "ClientCommand::RawCommand(node_serial={node_serial}, command={command}, expire_time=\"{expire_time_dt}\")"
+                    "ClientCommand::RawCommand(node_serial={}, command={}, expire_time={:?})",
+                    node_serial,
+                    command,
+                    DateTime::<Utc>::from(*expire_time).format("%F %T").to_string(),
                 )
             }
         }
@@ -162,7 +162,7 @@ impl fmt::Display for ClientResponse {
                 write!(f, "ClientResponse::RawResponse(response={response})")
             }
             Self::Error(error) => {
-                write!(f, "ClientResponse::Error(error={:?})", error)
+                write!(f, "ClientResponse::Error(error={error:?})")
             }
         }
     }
