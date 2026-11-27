@@ -1,7 +1,5 @@
 [workspace]
-members = [
-    "core", "discord", "http", "telegram",
-]
+members = ["core", "discord", "http", "telegram"]
 
 resolver = "3"
 

@@ -28,7 +28,7 @@ macro_rules! match_strict {
 }
 
 /// Prints info about a node in a human-friendly format.
-fn print_node(node: &Node) -> () {
+fn print_node(node: &Node) {
     println!(
         "{}: {} ({})",
         "node".green().bold(),
@@ -68,18 +68,18 @@ fn print_node(node: &Node) -> () {
 
     match &node.sessions {
         Ok(sessions) => {
-            if sessions.len() > 0 {
+            if !sessions.is_empty() {
                 println!("{}:", "sessions".yellow().bold());
                 let max_user_len = sessions
-                    .into_iter()
+                    .iter()
                     .map(|session| session.user.len())
                     .max()
                     .unwrap_or(0);
-                sessions.into_iter().for_each(|session| {
+                sessions.iter().for_each(|session| {
                     let dt: DateTime<Local> = session.login.into();
                     let from = match &session.from {
                         Some(from) => format!("({from})"),
-                        None => format!("(/)"),
+                        None => "(/)".to_owned(),
                     };
                     println!(
                         "  {user: <user_width$}{login: <7}{from}",
@@ -95,7 +95,7 @@ fn print_node(node: &Node) -> () {
     }
 
     match &node.wg_peers {
-        Ok(wg_peers) => wg_peers.into_iter().for_each(|wg_peer| {
+        Ok(wg_peers) => wg_peers.iter().for_each(|wg_peer| {
             println!("{}: {}", "wg peer".yellow().bold(), wg_peer.peer);
             println!("  {}: {}", "interface".bold(), wg_peer.interface);
             if let Some(endpoint) = &wg_peer.endpoint {
@@ -229,7 +229,7 @@ pub fn main(command: String, stream: &mut UnixStream) -> Result<()> {
             secmon::utils::sort_nodes(&mut nodes, get_config!(client));
             for (i, node) in nodes.into_iter().filter(|node| node.connected).enumerate() {
                 if i != 0 {
-                    println!("");
+                    println!();
                 }
                 match command {
                     None => print_node(&node),

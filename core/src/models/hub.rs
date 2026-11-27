@@ -74,8 +74,12 @@ impl fmt::Display for Node {
             self.address.to_string(),
             get_vec_len(&self.sessions),
             get_vec_len(&self.wg_peers),
-            DateTime::<Utc>::from(self.last_state_update).format("%F %T").to_string(),
-            DateTime::<Utc>::from(self.last_keepalive).format("%F %T").to_string(),
+            DateTime::<Utc>::from(self.last_state_update)
+                .format("%F %T")
+                .to_string(),
+            DateTime::<Utc>::from(self.last_keepalive)
+                .format("%F %T")
+                .to_string(),
         )
     }
 }
@@ -121,7 +125,9 @@ impl fmt::Display for ClientCommand {
                     "ClientCommand::RawCommand(node_serial={}, command={}, expire_time={:?})",
                     node_serial,
                     command,
-                    DateTime::<Utc>::from(*expire_time).format("%F %T").to_string(),
+                    DateTime::<Utc>::from(*expire_time)
+                        .format("%F %T")
+                        .to_string(),
                 )
             }
         }

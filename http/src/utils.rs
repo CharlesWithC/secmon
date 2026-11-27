@@ -38,7 +38,7 @@ pub fn execute_command(command: &ClientCommand, expires_in: u64) -> Result<Clien
                 stream.set_read_timeout(Some(Duration::from_secs(expires_in)))?;
             }
             stream.write(command)?;
-            match stream.read::<ClientResponse>().map(|resp| Ok(resp)) {
+            match stream.read::<ClientResponse>().map(Ok) {
                 Ok(resp) => resp,
                 Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => Err(anyhow!("timeout")),
                 Err(e) => Err(e)?,

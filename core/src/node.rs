@@ -49,8 +49,8 @@ pub fn main() -> Result<()> {
             let noise_config = &get_config!(node).noise;
             if noise_config.enable {
                 let mut noise = snow::Builder::new(NOISE_PATTERN.parse()?)
-                    .local_private_key(&noise_config.private_key.as_ref())?
-                    .remote_public_key(&noise_config.hub_public_key.as_ref())?
+                    .local_private_key(noise_config.private_key.as_ref())?
+                    .remote_public_key(noise_config.hub_public_key.as_ref())?
                     .psk(0, &noise_config.preshared_key.into())?
                     .build_initiator()?;
                 let mut ct = [0u8; NOISE_MAXLEN]; // buffer for encrypted handshake data
@@ -246,13 +246,14 @@ pub fn main() -> Result<()> {
             *terminate_flag.lock().unwrap() = true;
 
             // kill child processes
+            #[expect(
+                clippy::single_element_loop,
+                reason = "potential for more child targets"
+            )]
             for mutex in [child_journalctl] {
-                let ref mut child_opt = *mutex.lock().unwrap();
-                match child_opt {
-                    Some(child) => {
-                        let _ = child.kill();
-                    }
-                    None => {}
+                let child_opt = &mut *mutex.lock().unwrap();
+                if let Some(child) = child_opt {
+                    let _ = child.kill();
                 }
             }
 

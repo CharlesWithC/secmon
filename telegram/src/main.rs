@@ -78,7 +78,7 @@ fn thread_node_update(send_message: &impl Fn(Option<String>)) -> Result<()> {
                             .iter()
                             .find(|node| node.serial == serial)
                             .ok_or_else(|| anyhow!("Unable to identify node by serial {serial}"))?;
-                        send_message(parser::parse_node_update(&node, &data));
+                        send_message(parser::parse_node_update(node, &data));
                     }
                     _ => Err(anyhow!("Hub sent a response that is not NodeUpdate"))?, // should not happen
                 }
@@ -101,7 +101,7 @@ fn handle_message(
         [query @ ("list" | "-" | _), label @ ..] => {
             let mut nodes = match *query {
                 "list" | "-" => utils::list_nodes()?,
-                query @ _ => utils::find_nodes((*query).to_owned())?,
+                query => utils::find_nodes((*query).to_owned())?,
             };
             secmon::utils::sort_nodes(&mut nodes, get_config!(client));
 
@@ -109,7 +109,7 @@ fn handle_message(
                 send_message(parser::parse_node_list(tz, &nodes));
             } else {
                 if !enable_exec {
-                    send_message(Some(format!("Remote command execution is not enabled")));
+                    send_message(Some("Remote command execution is not enabled".to_owned()));
                     return Ok(());
                 }
 
@@ -133,7 +133,7 @@ fn handle_message(
                     let (content, _tempdir, file) = parser::parse_result(&node, &result)?;
                     match file {
                         None => send_message(Some(content)),
-                        Some(file) => send_document(Some(content), file.into()),
+                        Some(file) => send_document(Some(content), file),
                     }
                 }
             }
@@ -172,26 +172,24 @@ fn main() {
     // helper function to send message with `user_id` copied inside
     // note: if text is `None`, then return directly
     let bot_clone = bot.clone();
-    let send_message = move |text: Option<String>| -> () {
-        match text {
-            None => return,
-            Some(text) => {
-                let params = SendMessageParams::builder()
-                    .chat_id(*owner_id as i64)
-                    .text(text)
-                    .parse_mode(ParseMode::Html)
-                    .build();
-                let result = bot_clone.send_message(&params);
-                if let Err(e) = result {
-                    println!("Failed to send message: {e}");
-                }
+    let send_message = move |text: Option<String>| match text {
+        None => (),
+        Some(text) => {
+            let params = SendMessageParams::builder()
+                .chat_id(*owner_id as i64)
+                .text(text)
+                .parse_mode(ParseMode::Html)
+                .build();
+            let result = bot_clone.send_message(&params);
+            if let Err(e) = result {
+                println!("Failed to send message: {e}");
             }
         }
     };
     // helper function to send file with `user_id` copied inside
     // note: text refers to caption in message
     let bot_clone = bot.clone();
-    let send_document = move |text: Option<String>, path: PathBuf| -> () {
+    let send_document = move |text: Option<String>, path: PathBuf| {
         let params = SendDocumentParams::builder()
             .chat_id(*owner_id as i64)
             .maybe_caption(text)
@@ -257,16 +255,16 @@ fn main() {
                                     continue;
                                 }
 
-                                if let Some(message) = message.text {
-                                    if let Err(e) = handle_message(
+                                if let Some(message) = message.text
+                                    && let Err(e) = handle_message(
                                         features.iter().any(|s| matches!(s, TelegramFeature::Exec)),
-                                        &tz,
+                                        tz,
                                         &send_message,
                                         &send_document,
                                         message,
-                                    ) {
-                                        send_message(Some(format!("Error: {e}")));
-                                    }
+                                    )
+                                {
+                                    send_message(Some(format!("Error: {e}")));
                                 }
                             }
                             _ => {

@@ -81,7 +81,7 @@ where
 {
     let s = String::deserialize(d)?;
     if s.is_empty() {
-        return Err(D::Error::custom(format!("value must not be empty")));
+        return Err(D::Error::custom("value must not be empty".to_owned()));
     }
     Ok(s)
 }

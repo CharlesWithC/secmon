@@ -141,7 +141,7 @@ impl<S: IOSerialized> IOSerialized for NoisyStream<S> {
         let buf = self.stream.read_upto::<Vec<u8>>(NOISE_MAXLEN)?;
         let n = noise
             .state
-            .read_message(*rx, &buf.as_slice(), &mut buf_pt)
+            .read_message(*rx, buf.as_slice(), &mut buf_pt)
             .map_err(noise_err)?;
         *rx += 1;
         let n_chunks = u32::from_be_bytes(
@@ -172,7 +172,7 @@ impl<S: IOSerialized> IOSerialized for NoisyStream<S> {
             let buf = self.stream.read_upto::<Vec<u8>>(NOISE_MAXLEN)?;
             let n = noise
                 .state
-                .read_message(*rx, &buf.as_slice(), &mut buf_pt)
+                .read_message(*rx, buf.as_slice(), &mut buf_pt)
                 .map_err(noise_err)?;
             *rx += 1;
             encoded.extend_from_slice(&buf_pt[..n]);
@@ -191,7 +191,7 @@ pub struct Key(pub [u8; NOISE_KEYLEN]);
 impl Key {
     /// Returns whether a key exists, or if it's just an all-0 placeholder.
     pub fn exists(&self) -> bool {
-        return !self.0.iter().all(|&x| x == 0);
+        !self.0.iter().all(|&x| x == 0)
     }
 }
 
@@ -204,9 +204,9 @@ impl From<Vec<u8>> for Key {
     }
 }
 
-impl Into<Vec<u8>> for Key {
-    fn into(self) -> Vec<u8> {
-        self.0.to_vec()
+impl From<Key> for Vec<u8> {
+    fn from(val: Key) -> Self {
+        val.0.to_vec()
     }
 }
 
@@ -216,9 +216,9 @@ impl From<[u8; NOISE_KEYLEN]> for Key {
     }
 }
 
-impl Into<[u8; NOISE_KEYLEN]> for Key {
-    fn into(self) -> [u8; NOISE_KEYLEN] {
-        self.0
+impl From<Key> for [u8; NOISE_KEYLEN] {
+    fn from(val: Key) -> Self {
+        val.0
     }
 }
 

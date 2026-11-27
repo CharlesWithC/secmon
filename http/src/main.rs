@@ -37,12 +37,9 @@ fn handle_node_update(upd_s: Sender<BodyNodeUpdate>) -> Result<()> {
 
     loop {
         let resp = stream.read::<ClientResponse>()?;
-        match resp {
-            ClientResponse::NodeUpdate { node_serial, data } => {
-                let _ = upd_s.send(BodyNodeUpdate { node_serial, data }); // ignore error when nobody listening
-            }
-            _ => {} // should not happen
-        }
+        if let ClientResponse::NodeUpdate { node_serial, data } = resp {
+            let _ = upd_s.send(BodyNodeUpdate { node_serial, data }); // ignore error when nobody listening
+        } // else: should not happen
     }
 }
 

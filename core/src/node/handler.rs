@@ -21,7 +21,7 @@ fn handle_exec_command(
 
     let timeout = match node_config.command_execute_timeout {
         0 => None,
-        sec @ _ => Some(Duration::from_secs(sec)),
+        sec => Some(Duration::from_secs(sec)),
     };
 
     if !stream {
@@ -120,7 +120,7 @@ fn handle_exec_command(
                     }
                 }
             }
-            Err(e) => stream_failure!(sw_s, format!("{e}")),
+            Err(e) => stream_failure!(sw_s, e.to_string()),
         }
     }
     Ok(())
@@ -228,7 +228,7 @@ pub fn update_node_state(node_state_mutex: &NodeStateMutex) -> (bool, NodeUpdate
 /// Macro to try to wait for a child to exit, and ignore error if fails.
 macro_rules! wait_child {
     ( $child_opt_mutex:expr ) => {
-        let ref mut child_opt = *$child_opt_mutex.lock().unwrap();
+        let child_opt = &mut *$child_opt_mutex.lock().unwrap();
         match child_opt {
             Some(child) => {
                 let _ = child.wait();
@@ -305,7 +305,7 @@ fn run_journalctl(
                 auth_log: Some(Ok(log)),
                 event: None,
             }));
-            if let Err(_) = result {
+            if result.is_err() {
                 // channel closed, return
                 // error should only be propagated on "actual" error (e.g. when collecting/parsing data)
                 return Ok(());
@@ -320,7 +320,7 @@ fn run_journalctl(
     reader
         .read_to_string(&mut buf)
         .map_err(|e| anyhow!("Unable to process journalctl stderr: {e}"))?;
-    if buf.trim().len() != 0 {
+    if !buf.trim().is_empty() {
         let _ = sw_s.send(Response::NodeUpdate(NodeUpdate {
             sessions: None,
             wg_peers: None,
@@ -357,7 +357,7 @@ pub fn handle_journalctl(
                 }));
                 return false;
             }
-            return true;
+            true
         }
         Err(e) => {
             let _ = sw_s.send(Response::NodeUpdate(NodeUpdate {
@@ -368,7 +368,7 @@ pub fn handle_journalctl(
                 )))),
                 event: None,
             }));
-            return false;
+            false
         }
-    };
+    }
 }

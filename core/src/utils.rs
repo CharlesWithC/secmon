@@ -78,7 +78,7 @@ where
 pub fn get_socket_path() -> String {
     match get_current_uid() {
         0 => "/run/secmon.sock".to_owned(),
-        uid @ _ => format!("/run/user/{uid}/secmon.sock"),
+        uid => format!("/run/user/{uid}/secmon.sock"),
     }
 }
 
@@ -90,7 +90,7 @@ pub fn is_streaming_response(response: &Response) -> bool {
             status: ResultStatus::Pending,
             ..
         } => true,
-        Response::ResultStream { status: _, .. }
+        Response::ResultStream { .. }
         | Response::KeepAlive
         | Response::Connect { .. }
         | Response::NodeState(_)
@@ -107,8 +107,7 @@ pub fn deadline_watchdog<F, G>(
     deadline: Duration,
     callback_success: F,
     callback_fail: G,
-) -> ()
-where
+) where
     F: FnOnce() + Send + 'static,
     G: FnOnce() + Send + 'static,
 {
@@ -121,7 +120,7 @@ where
 }
 
 /// Sort nodes in place based on client config.
-pub fn sort_nodes(nodes: &mut Vec<Node>, config: &ClientConfig) -> () {
+pub fn sort_nodes(nodes: &mut [Node], config: &ClientConfig) {
     let cmp_group_base = |a: &Node, b: &Node| -> Ordering { a.group.cmp(&b.group) };
 
     let cmp_node_key: fn(&Node, &Node) -> Ordering = match config.node_order_key {
@@ -167,7 +166,7 @@ pub fn sort_nodes(nodes: &mut Vec<Node>, config: &ClientConfig) -> () {
 /// If `-c` is set, then `config_path` is `Some(path)`, otherwise `None`.
 ///
 /// If `-v` is set, then `verbose` is `true`, otherwise `false`.
-pub fn parse_generic_args(args: &Vec<String>) -> Result<(Option<String>, bool)> {
+pub fn parse_generic_args(args: &[String]) -> Result<(Option<String>, bool)> {
     let mut config_path: Option<String> = None;
     let mut verbose = false;
 
@@ -195,15 +194,15 @@ pub fn parse_generic_args(args: &Vec<String>) -> Result<(Option<String>, bool)> 
     Ok((config_path, verbose))
 }
 
-/// Returns sanitized generic command line arguments.
+/// Returns sanitized generic command line arguments. Does not modify original `args`.
 ///
-/// This removes `-c` and `-v` arguments from `args`, assuming `-c` is followed by config path.
+/// Removes `-c` and `-v` arguments from `args`, assuming `-c` is followed by config path.
 ///
 /// If an unrecognized argument is detected, prints an error and exits program.
 ///
 /// Note: Commands (e.g. `hub` in `secmon hub`) are not parsed or removed.
-pub fn sanitize_generic_args(args: &Vec<String>) -> Vec<String> {
-    let mut args = args.clone();
+pub fn sanitize_generic_args(args: &[String]) -> Vec<String> {
+    let mut args = args.to_vec();
     let mut skip_next = false;
     args.retain(|a| {
         if std::mem::take(&mut skip_next) {
@@ -216,6 +215,7 @@ pub fn sanitize_generic_args(args: &Vec<String>) -> Vec<String> {
                 false
             }
             _ => {
+                // `-` could be mean "all nodes", thus ignore
                 if a.starts_with("-") && a != "-" {
                     println!("Invalid argument: {a:?}");
                     process::exit(1);
@@ -276,7 +276,7 @@ pub fn read_config<T: DeserializeOwned>(path: Option<String>) -> Result<T> {
 /// - detects configuration file, then parses and sets it in `config`
 /// - detects verbose mode, then sets it in `secmon::logging::VERBOSE`
 pub fn init_from_generic_args<T: DeserializeOwned + std::fmt::Debug>(
-    args: &Vec<String>,
+    args: &[String],
     config: &OnceLock<T>,
 ) -> Result<()> {
     let (config_path, _verbose) = parse_generic_args(args)?;

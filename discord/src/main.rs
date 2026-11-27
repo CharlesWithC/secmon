@@ -30,7 +30,7 @@ Options:
   {GENERIC_OPTIONS}"
 );
 
-fn send_webhook(uri: &String, body: &Webhook) -> () {
+fn send_webhook(uri: &String, body: &Webhook) {
     let result = ureq::post(uri).send_json(body);
     match result {
         Ok(_) => {}
@@ -67,7 +67,7 @@ fn main() {
                 fields: Vec::<EmbedField>::new(),
             }],
         };
-        send_webhook(&webhook, &body);
+        send_webhook(webhook, &body);
         process::exit(0);
     }
 
@@ -89,10 +89,10 @@ fn main() {
                                 match nodes.iter().find(|node| node.serial == serial) {
                                     None => eprintln!("Unable to identify node by serial {serial}"),
                                     Some(node) => {
-                                        if let Some(embed) = parser::parse_node_update(&node, &data)
+                                        if let Some(embed) = parser::parse_node_update(node, &data)
                                         {
                                             send_webhook(
-                                                &webhook,
+                                                webhook,
                                                 &Webhook {
                                                     content: content.clone(),
                                                     embeds: vec![embed],

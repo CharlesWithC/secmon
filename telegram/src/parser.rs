@@ -74,11 +74,11 @@ pub fn parse_node_update(node: &Node, data: &NodeUpdate) -> Option<String> {
         match event {
             NodeEvent::Connect(_) => {
                 ok = true;
-                result += &format!("Node connected.\n");
+                result += "Node connected.\n";
             }
             NodeEvent::Disconnect => {
                 ok = true;
-                result += &format!("Node disconnected.\n");
+                result += "Node disconnected.\n";
             }
             NodeEvent::KeepAlive => {} // do nothing if it's keepalive
         }
@@ -125,19 +125,19 @@ pub fn parse_node(tz: &Tz, node: &Node) -> String {
 
     match &node.sessions {
         Ok(sessions) => {
-            if sessions.len() > 0 {
+            if !sessions.is_empty() {
                 ret += "sessions:\n";
                 let max_user_len = sessions
-                    .into_iter()
+                    .iter()
                     .map(|session| session.user.len())
                     .max()
                     .unwrap_or(0);
-                sessions.into_iter().for_each(|session| {
+                sessions.iter().for_each(|session| {
                     let dt: DateTime<Utc> = session.login.into();
                     let dt: DateTime<Tz> = dt.with_timezone(tz);
                     let from = match &session.from {
                         Some(from) => format!("({from})"),
-                        None => format!("(/)"),
+                        None => "(/)".to_owned(),
                     };
                     ret += format!(
                         "  <code>{user: <user_width$}</code><code>{login: <7}</code><code>{from}</code>\n",
@@ -155,9 +155,9 @@ pub fn parse_node(tz: &Tz, node: &Node) -> String {
 
     match &node.wg_peers {
         Ok(wg_peers) => {
-            if wg_peers.len() > 0 {
+            if !wg_peers.is_empty() {
                 ret += "wg peers:\n";
-                wg_peers.into_iter().for_each(|wg_peer| {
+                wg_peers.iter().for_each(|wg_peer| {
                     ret += format!("  <code>{}</code>", wg_peer.interface).as_str();
                     if let Some(endpoint) = &wg_peer.endpoint {
                         ret += format!("  <code>{}</code>", endpoint).as_str();
@@ -188,7 +188,7 @@ pub fn parse_node_list(tz: &Tz, nodes: &Vec<Node>) -> Option<String> {
     for node in nodes {
         ret += parse_node(tz, node).as_str();
 
-        if ret != "" {
+        if !ret.is_empty() {
             ret += "\n";
         }
     }
@@ -222,7 +222,7 @@ pub fn parse_result(
                     tempdir = Some(tempfile::tempdir()?);
                     path = Some(tempdir.as_ref().unwrap().path().join("output.txt"));
                     writeln!(File::create(path.as_ref().unwrap())?, "{text}")?;
-                    format!("<i>See attached file</i>")
+                    "<i>See attached file</i>".to_owned()
                 }
             };
 

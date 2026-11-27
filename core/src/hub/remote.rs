@@ -52,7 +52,7 @@ fn handle_new_node(
     // initialize node
     let node = Node {
         serial: *counter,
-        address: address.clone(),
+        address: *address,
         hostname: hostname.clone(),
         group: group.clone(),
         sessions: Err(NodeDataError::Initializing),
@@ -75,7 +75,7 @@ fn handle_new_node(
 /// Broadcasts node update to subscribed clients.
 ///
 /// Client subscription will be removed if data cannot be sent to the client.
-fn broadcast_update(serial: u32, data: &NodeUpdate, hub_state: &HubStateMutex) -> () {
+fn broadcast_update(serial: u32, data: &NodeUpdate, hub_state: &HubStateMutex) {
     let mut guard = hub_state.lock().unwrap();
     let (_, _, ref mut subscribers) = *guard;
 
@@ -149,7 +149,7 @@ fn update_hub_state(
 ///
 /// When local command sender is dropped, the thread handling local commands
 /// would error and terminate.
-fn handle_stream_close(serial: u32, hub_state: &HubStateMutex) -> () {
+fn handle_stream_close(serial: u32, hub_state: &HubStateMutex) {
     let mut guard = hub_state.lock().unwrap();
     let (_, ref mut nodes, _) = *guard;
     if let Some(index) = nodes.iter().position(|(node, _)| node.serial == serial) {
@@ -188,7 +188,7 @@ fn thread_main(stream: TcpStream, hub_state: &HubStateMutex) -> Result<()> {
     let noise_config = &get_config!(hub).noise;
     if noise_config.enable {
         let mut noise = snow::Builder::new(NOISE_PATTERN.parse()?)
-            .local_private_key(&noise_config.private_key.as_ref())?
+            .local_private_key(noise_config.private_key.as_ref())?
             .psk(0, &noise_config.preshared_key.into())?
             .build_responder()?;
         let mut ct = [0u8; NOISE_MAXLEN]; // buffer for encrypted handshake data
@@ -273,7 +273,7 @@ fn thread_main(stream: TcpStream, hub_state: &HubStateMutex) -> Result<()> {
         broadcast_update(
             serial,
             &node_event(NodeEvent::Connect(hostname.clone())),
-            &hub_state,
+            hub_state,
         );
         match group {
             None => println!("{address} ({hostname}) connected and was assigned serial {serial}"),
@@ -356,15 +356,15 @@ fn thread_main(stream: TcpStream, hub_state: &HubStateMutex) -> Result<()> {
                 match resp {
                     Response::KeepAlive => {
                         let data = node_event(NodeEvent::KeepAlive);
-                        broadcast_update(serial, &data, &hub_state);
-                        update_hub_state(serial, &address, &hostname, &group, data, &hub_state);
+                        broadcast_update(serial, &data, hub_state);
+                        update_hub_state(serial, &address, &hostname, &group, data, hub_state);
                     }
                     Response::Connect { .. } => {} // should not occur
                     Response::NodeUpdate(data) => {
-                        broadcast_update(serial, &data, &hub_state);
-                        update_hub_state(serial, &address, &hostname, &group, data, &hub_state);
+                        broadcast_update(serial, &data, hub_state);
+                        update_hub_state(serial, &address, &hostname, &group, data, hub_state);
                     }
-                    response @ _ => {
+                    response => {
                         // broadcast other response directly
                         sr_s.send(response)?;
                     }
@@ -373,8 +373,8 @@ fn thread_main(stream: TcpStream, hub_state: &HubStateMutex) -> Result<()> {
         }();
 
         // close the stream to drop `cmd_sender` to terminate the command handling thread
-        broadcast_update(serial, &node_event(NodeEvent::Disconnect), &hub_state);
-        handle_stream_close(serial, &hub_state);
+        broadcast_update(serial, &node_event(NodeEvent::Disconnect), hub_state);
+        handle_stream_close(serial, hub_state);
 
         result
     })
@@ -383,7 +383,7 @@ fn thread_main(stream: TcpStream, hub_state: &HubStateMutex) -> Result<()> {
 /// Cleanup thread function for removing disconnected nodes after grace period.
 ///
 /// This is a blocking function and does not exit unless interrupted.
-fn thread_cleanup(hub_state: HubStateMutex, cleanup_state: CleanupStateMutex) -> () {
+fn thread_cleanup(hub_state: HubStateMutex, cleanup_state: CleanupStateMutex) {
     loop {
         let now = SystemTime::now();
         let mut expired: Vec<u32> = Vec::new();
@@ -410,7 +410,7 @@ fn thread_cleanup(hub_state: HubStateMutex, cleanup_state: CleanupStateMutex) ->
 /// Main function listening for incoming remote node connnections.
 ///
 /// This is a blocking function and does not exit unless interrupted.
-pub fn main(listener: TcpListener, hub_state: HubStateMutex) -> () {
+pub fn main(listener: TcpListener, hub_state: HubStateMutex) {
     // (serial, expire_time) pairs
     // when node disconnects, it is added here with expire_time = now + disconnect_grace_period
     // when expire_time < now, it is removed from hub_state and this list

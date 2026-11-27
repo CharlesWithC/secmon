@@ -105,6 +105,7 @@ pub struct HubNoise {
     pub node_whitelist: BTreeMap<Key, String>,
 }
 
+#[expect(clippy::derivable_impls, reason = "explicit defaults for consistency")]
 impl Default for HubNoise {
     fn default() -> Self {
         Self {
@@ -235,6 +236,7 @@ pub struct NodeNoise {
     pub preshared_key: Key,
 }
 
+#[expect(clippy::derivable_impls, reason = "explicit defaults for consistency")]
 impl Default for NodeNoise {
     fn default() -> Self {
         Self {
@@ -357,7 +359,7 @@ where
     V: Deserialize<'de> + Ord,
 {
     let map = BTreeMap::<String, V>::deserialize(deserializer)?;
-    for (k, _) in &map {
+    for k in map.keys() {
         if k.starts_with('-') {
             return Err(D::Error::custom(format!(
                 "value must not start with '-': {k:?}"

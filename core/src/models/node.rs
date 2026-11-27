@@ -134,7 +134,9 @@ impl fmt::Display for Session {
             "Session(user={:?}, from={:?}, login={:?})",
             self.user,
             self.from.as_deref().unwrap_or("N/A"),
-            DateTime::<Utc>::from(self.login).format("%F %T").to_string(),
+            DateTime::<Utc>::from(self.login)
+                .format("%F %T")
+                .to_string(),
         )
     }
 }

@@ -1,5 +1,4 @@
 use anyhow::{Result, anyhow, bail};
-use getrandom;
 use snow::Builder;
 use std::fs;
 use std::{env, process};
@@ -37,7 +36,7 @@ Options:
 /// Handles simple commands that do not involve options.
 ///
 /// Returns `Ok(true)` if command is handled, `Ok(false)` if command is not handled, and `Err` is an error occurred.
-fn handle_simple_command(args: &Vec<String>) -> Result<bool> {
+fn handle_simple_command(args: &[String]) -> Result<bool> {
     match args.get(1).unwrap().as_str() {
         "genkey" => {
             match args
@@ -61,7 +60,7 @@ fn handle_simple_command(args: &Vec<String>) -> Result<bool> {
                     println!("Preshared: {}", Key::from(buf));
                     Ok(true)
                 }
-                kt @ _ => {
+                kt => {
                     bail!("{kt:?} is not a valid type of key. Choose from 'pair' or 'psk'.");
                 }
             }
@@ -75,14 +74,12 @@ fn handle_simple_command(args: &Vec<String>) -> Result<bool> {
 }
 
 /// Wrapped "real" main to return errors if any.
-fn launch(args: &Vec<String>) -> Result<()> {
+fn launch(args: &[String]) -> Result<()> {
     match args.get(1).unwrap().as_str() {
         "hub" => {
             let noise = &get_config!(hub).noise;
-            if noise.enable {
-                if !noise.private_key.exists() {
-                    bail!("Invalid config: Noise protocol is enabled but `private_key` is not set");
-                }
+            if noise.enable && !noise.private_key.exists() {
+                bail!("Invalid config: Noise protocol is enabled but `private_key` is not set");
             }
 
             let socket_path = get_socket_path();

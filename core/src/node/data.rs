@@ -36,7 +36,7 @@ pub fn get_sessions() -> Result<Vec<Session>, String> {
     for line in res_who.output.lines() {
         let parts = line.split_whitespace().collect::<Vec<_>>();
         if parts.len() < 3 {
-            return Err(format!("command 'who' did not produce a valid output"));
+            return Err("command 'who' did not produce a valid output".to_owned());
         }
 
         let len = parts.len();
@@ -89,7 +89,7 @@ pub fn get_wg_peers() -> Result<Vec<WgPeer>, String> {
                 peer: parts[1].to_owned(),
                 endpoint: match parts[3] {
                     "(none)" => None,
-                    endpoint @ _ => Some(endpoint.to_owned()),
+                    endpoint => Some(endpoint.to_owned()),
                 },
                 latest_handshake: match parts[5].parse::<u64>() {
                     Ok(timestamp) if timestamp != 0 => {
